@@ -75,5 +75,9 @@
         <!-- Typed Handler for auto-indentation -->
         <typedHandler
             implementation="com.lantharos.flick.FlickTypedHandler"/>
+
+        <!-- Color Settings Page -->
+        <colorSettingsPage
+            implementation="com.lantharos.flick.FlickColorSettingsPage"/>
     </extensions>
 </idea-plugin>

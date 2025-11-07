@@ -12,7 +12,13 @@ object FlickTokenTypes {
     val IDENTIFIER = IElementType("IDENTIFIER", FlickLanguage)
     val STRING = IElementType("STRING", FlickLanguage)
     val NUMBER = IElementType("NUMBER", FlickLanguage)
-    val OPERATOR = IElementType("OPERATOR", FlickLanguage)
+
+    // Different operator types for better highlighting
+    val ASSIGN_OPERATOR = IElementType("ASSIGN_OPERATOR", FlickLanguage)  // :=, =
+    val ARROW_OPERATOR = IElementType("ARROW_OPERATOR", FlickLanguage)    // =>, ->
+    val ARITHMETIC_OPERATOR = IElementType("ARITHMETIC_OPERATOR", FlickLanguage) // +, -, *, /
+    val COMPARISON_OPERATOR = IElementType("COMPARISON_OPERATOR", FlickLanguage) // ==, !=, <, >, <=, >=
+    val PUNCTUATION = IElementType("PUNCTUATION", FlickLanguage)  // ., ,, ;, :, @
 
     val LPAREN = IElementType("LPAREN", FlickLanguage)
     val RPAREN = IElementType("RPAREN", FlickLanguage)

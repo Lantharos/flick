@@ -44,14 +44,18 @@ class FlickLexer : LexerBase() {
             isDigit(peek()) -> scanNumber()
             isLetter(peek()) || peek() == '_' -> scanIdentifierOrKeyword()
             peek() == '/' && peekNext() == '/' -> scanComment()
-            peek() == ':' && peekNext() == '=' -> scanOperator(2)
-            peek() == '=' && peekNext() == '=' -> scanOperator(2)
-            peek() == '!' && peekNext() == '=' -> scanOperator(2)
-            peek() == '<' && peekNext() == '=' -> scanOperator(2)
-            peek() == '>' && peekNext() == '=' -> scanOperator(2)
-            peek() == '=' && peekNext() == '>' -> scanOperator(2)
+            peek() == ':' && peekNext() == '=' -> scanAssignOperator()
+            peek() == '=' && peekNext() == '>' -> scanArrowOperator()
+            peek() == '-' && peekNext() == '>' -> scanArrowOperator()
+            peek() == '=' && peekNext() == '=' -> scanComparisonOperator()
+            peek() == '!' && peekNext() == '=' -> scanComparisonOperator()
+            peek() == '<' && peekNext() == '=' -> scanComparisonOperator()
+            peek() == '>' && peekNext() == '=' -> scanComparisonOperator()
+            peek() == '=' -> scanAssignOperator()
+            peek() in "+-*/" -> scanArithmeticOperator()
+            peek() in "<>!" -> scanComparisonOperator()
             peek() in "(){}[]" -> scanBracket()
-            peek() in "+-*/<>=!.,;:@" -> scanOperator(1)
+            peek() in ".,;:@" -> scanPunctuation()
             else -> {
                 currentOffset++
                 FlickTokenTypes.BAD_CHARACTER
@@ -105,12 +109,28 @@ class FlickLexer : LexerBase() {
         }
         val text = buffer.substring(start, currentOffset)
         return when (text) {
-            // Keywords
-            "free", "lock", "group", "task", "blueprint", "do", "for",
-            "assume", "maybe", "otherwise", "each", "in", "march", "from", "to",
-            "select", "when", "suppose", "print", "declare", "use", "import",
-            "route", "respond", "with", "end", "yes", "no",
-            "num", "literal" -> FlickTokenTypes.KEYWORD
+            // Control flow keywords
+            "free", "lock", "assume", "maybe", "otherwise", "each", "in",
+            "march", "from", "to", "select", "when", "suppose", "end",
+
+            // Declaration keywords
+            "group", "task", "blueprint", "do", "for", "declare", "use", "import",
+
+            // Web keywords
+            "route", "respond",
+
+            // Built-in functions (highlighted specially)
+            "print", "ask", "with",
+
+            // Type keywords
+            "num", "literal",
+
+            // Boolean literals
+            "yes", "no",
+
+            // Other
+            "and" -> FlickTokenTypes.KEYWORD
+
             else -> FlickTokenTypes.IDENTIFIER
         }
     }
@@ -128,9 +148,31 @@ class FlickLexer : LexerBase() {
         }
     }
 
-    private fun scanOperator(length: Int): IElementType {
-        currentOffset += length
-        return FlickTokenTypes.OPERATOR
+    private fun scanAssignOperator(): IElementType {
+        currentOffset++
+        if (peek() == '=') currentOffset++ // for :=
+        return FlickTokenTypes.ASSIGN_OPERATOR
+    }
+
+    private fun scanArrowOperator(): IElementType {
+        currentOffset += 2
+        return FlickTokenTypes.ARROW_OPERATOR
+    }
+
+    private fun scanArithmeticOperator(): IElementType {
+        currentOffset++
+        return FlickTokenTypes.ARITHMETIC_OPERATOR
+    }
+
+    private fun scanComparisonOperator(): IElementType {
+        currentOffset++
+        if (peek() == '=') currentOffset++ // for ==, !=, <=, >=
+        return FlickTokenTypes.COMPARISON_OPERATOR
+    }
+
+    private fun scanPunctuation(): IElementType {
+        currentOffset++
+        return FlickTokenTypes.PUNCTUATION
     }
 
     private fun isWhitespace(c: Char) = c == ' ' || c == '\t' || c == '\n' || c == '\r'
