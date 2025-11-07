@@ -1,0 +1,59 @@
+group Player {
+    free num health = 100
+    free literal name
+
+    task greet =>
+        print "Hello, I am " and name
+    end
+}
+
+blueprint Damageable {
+    task takeDamage with num(amount)
+}
+
+do Damageable for Player =>
+    task takeDamage with num(amount) =>
+        health := health - amount
+        print name and " took " and amount and " damage!"
+    end
+end
+
+free Player player := Player "Vikki"
+player.greet
+player.takeDamage 15
+
+free isActive = yes
+lock names = ["Alice", "Bob", "Charlie"]
+
+each name in names =>
+    print name
+    print "Meow"
+end
+
+march number from 1 to 5 =>
+    print "Number: " and number
+    print "It +50 is: " and number + 50
+end
+
+assume isActive =>
+    print "It's active!"
+maybe isActive == yes =>
+    isActive := yes
+otherwise =>
+    print "Not active :("
+end
+
+free config = {"mode":"production"}
+select config =>
+    when "mode" => suppose config["mode"] == "production" => print "Production mode enabled."
+    when "debug" => print "Debug setting found"
+end
+
+# def: does something idk
+# params: literal(sus) and num(meow)
+task doSomething with literal(sus), num(meow) =>
+    print "Hi " and sus and ", number is " and meow
+end
+
+doSomething "Amogus", 10
+
