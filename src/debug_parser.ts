@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { Lexer } from './src/lexer';
-import { Parser } from './src/parser';
-import { PluginManager } from './src/plugin';
+import { Lexer } from './lexer';
+import { Parser } from './parser';
+import { PluginManager } from './plugin';
 
 const code = `lock test = JSON.stringify {"message": outputStr}
 write "flick_demo_output.txt", test`;

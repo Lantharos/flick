@@ -14,13 +14,12 @@ val BUILTIN_FUNCTIONS: Set<String> = setOf(
 
 // Plugin-specific keywords and functions
 val WEB_PLUGIN_KEYWORDS: Set<String> = setOf("route", "respond", "GET", "POST", "PUT", "DELETE", "PATCH")
-val DB_PLUGIN_KEYWORDS: Set<String> = setOf("query", "execute", "transaction", "connect")
+val WEB_ROUTE_ONLY_KEYWORDS: Set<String> = setOf("query", "body", "headers") // Only usable inside route blocks
 val FILE_PLUGIN_KEYWORDS: Set<String> = setOf("read", "write", "exists", "listdir")
 
 // Map plugins to their keywords
 val PLUGIN_KEYWORDS: Map<String, Set<String>> = mapOf(
     "web" to WEB_PLUGIN_KEYWORDS,
-    "db" to DB_PLUGIN_KEYWORDS,
     "file" to FILE_PLUGIN_KEYWORDS
 )
 
@@ -89,7 +88,9 @@ class FlickAnnotator : Annotator {
             // Check for plugin-specific keywords without declaration
             else -> {
                 checkPluginSpecificKeyword(text, declaredPlugins, element, holder)
+                checkRouteOnlyKeywords(text, element, holder)
                 checkVariableIssues(element, text, fileText, holder)
+                checkUndefinedReferences(element, text, fileText, holder)
             }
         }
     }
@@ -251,6 +252,146 @@ class FlickAnnotator : Annotator {
                 return
             }
         }
+    }
+
+    private fun checkRouteOnlyKeywords(text: String, element: PsiElement, holder: AnnotationHolder) {
+        if (text !in WEB_ROUTE_ONLY_KEYWORDS) return
+
+        // Check if we're inside a route block
+        val fileText = element.containingFile.text
+        val offset = element.textRange.startOffset
+        val textBefore = fileText.substring(0, offset)
+
+        // Check if there's a route block enclosing this element
+        val isInsideRoute = isInsideRouteBlock(textBefore)
+
+        if (!isInsideRoute) {
+            holder.newAnnotation(
+                HighlightSeverity.ERROR,
+                "Keyword '$text' can only be used inside a 'route' block"
+            )
+                .range(element)
+                .create()
+        }
+    }
+
+    private fun isInsideRouteBlock(textBefore: String): Boolean {
+        // Remove comments
+        val cleanTextBefore = textBefore.lines().joinToString("\n") { line ->
+            val commentIndex = line.indexOf('#')
+            if (commentIndex >= 0) line.substring(0, commentIndex) else line
+        }
+
+        // Track route block depth
+        var routeDepth = 0
+        val blockPattern = Regex("""(route)\b.*=>|(task|assume|each|march|group|select|suppose|do)\b.*=>|\bend\b""")
+
+        blockPattern.findAll(cleanTextBefore).forEach { match ->
+            val matchText = match.value.trim()
+            when {
+                matchText == "end" -> routeDepth--
+                matchText.startsWith("route") -> routeDepth++
+                else -> {} // Other blocks don't affect route depth
+            }
+        }
+
+        return routeDepth > 0
+    }
+
+    private fun checkUndefinedReferences(element: PsiElement, text: String, fileText: String, holder: AnnotationHolder) {
+        // Skip if not an identifier
+        if (!text.matches(Regex("[a-zA-Z_][a-zA-Z0-9_]*"))) return
+
+        // Skip keywords
+        val allKeywords = setOf(
+            "free", "lock", "task", "route", "assume", "maybe", "otherwise", "each", "march",
+            "group", "blueprint", "do", "end", "select", "suppose", "when", "and", "or", "not",
+            "yes", "no", "declare", "import", "from", "with", "in", "to", "for", "while", "use"
+        )
+        if (text in allKeywords || text in BUILTIN_FUNCTIONS || text in WEB_PLUGIN_KEYWORDS ||
+            text in WEB_ROUTE_ONLY_KEYWORDS || text in FILE_PLUGIN_KEYWORDS) {
+            return
+        }
+
+        val offset = element.textRange.startOffset
+
+        // Skip if this is in a declaration context (after free, lock, task, group, blueprint, declare)
+        val textBefore = fileText.substring(maxOf(0, offset - 50), offset)
+        if (textBefore.matches(Regex(""".*\b(free|lock|task|group|blueprint|declare)\s+(?:num\s+|literal\s+)?$"""))) {
+            return
+        }
+
+        // Skip if this is a named parameter (like json=, status=, mode=, etc.)
+        val textAfter = fileText.substring(offset, minOf(fileText.length, offset + text.length + 1))
+        if (textAfter.matches(Regex("""${Regex.escape(text)}=.*"""))) {
+            return
+        }
+
+        // Skip if this is in a declare statement
+        if (textBefore.contains("declare") && !textBefore.substringAfter("declare").contains("\n")) {
+            return
+        }
+
+        // Skip if this is after "use" keyword
+        if (textBefore.matches(Regex(""".*\buse\s+$"""))) {
+            return
+        }
+
+        // Check if this is a function call
+        val isFunctionCall = isFollowedByArguments(element) ||
+            (element.nextSibling?.text?.trim()?.startsWith("with") == true)
+
+        if (isFunctionCall) {
+            // Check if function is defined before this point
+            val taskPattern = Regex("""task\s+${Regex.escape(text)}\b""")
+            if (!taskPattern.containsMatchIn(fileText.substring(0, offset))) {
+                holder.newAnnotation(
+                    HighlightSeverity.ERROR,
+                    "Function '$text' is not defined"
+                )
+                    .range(element)
+                    .create()
+            }
+        } else {
+            // Check if variable is defined in accessible scope
+            if (!isVariableInScope(text, offset, fileText)) {
+                // Could be a class name or group, check that too
+                val groupPattern = Regex("""group\s+${Regex.escape(text)}\b""")
+                val blueprintPattern = Regex("""blueprint\s+${Regex.escape(text)}\b""")
+
+                if (!groupPattern.containsMatchIn(fileText.substring(0, offset)) &&
+                    !blueprintPattern.containsMatchIn(fileText.substring(0, offset)) &&
+                    !text.matches(Regex("[A-Z][a-zA-Z0-9_]*"))) { // Skip capitalized (likely class names)
+
+                    holder.newAnnotation(
+                        HighlightSeverity.ERROR,
+                        "Variable '$text' is not defined"
+                    )
+                        .range(element)
+                        .create()
+                }
+            }
+        }
+    }
+
+    private fun isVariableInScope(varName: String, offset: Int, fileText: String): Boolean {
+        val textBefore = fileText.substring(0, offset)
+
+        // Remove comments
+        val cleanText = textBefore.lines().joinToString("\n") { line ->
+            val commentIndex = line.indexOf('#')
+            if (commentIndex >= 0) line.substring(0, commentIndex) else line
+        }
+
+        // Find all variable declarations
+        val varPattern = Regex("""(?:free|lock)\s+(?:num\s+|literal\s+|[A-Z][a-zA-Z0-9_]*\s+)?${Regex.escape(varName)}\s*=""")
+        val declarations = varPattern.findAll(cleanText).toList()
+
+        if (declarations.isEmpty()) return false
+
+        // For now, simple approach: if declared anywhere before, it's in scope
+        // TODO: More sophisticated scope tracking for nested blocks
+        return true
     }
 
     private fun isFollowedByArguments(element: PsiElement): Boolean {

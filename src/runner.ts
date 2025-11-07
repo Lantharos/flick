@@ -7,7 +7,7 @@ import { Interpreter } from './interpreter.js';
 import { PluginManager } from './plugin.js';
 import { WebPlugin, FilesPlugin, TimePlugin, RandomPlugin } from './plugins/builtins.js';
 
-async function runFlick(filePath: string): Promise<void> {
+export async function runFlick(filePath: string): Promise<void> {
   try {
     // Read the source code
     const sourceCode = readFileSync(filePath, 'utf-8');
@@ -38,8 +38,4 @@ async function runFlick(filePath: string): Promise<void> {
     process.exit(1);
   }
 }
-
-// Get file path from command line arguments
-const filePath = process.argv[2] || 'test.fk';
-runFlick(filePath);
 

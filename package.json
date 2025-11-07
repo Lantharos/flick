@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "run": "tsx src/runner.ts"
+    "run": "tsx src/runner.ts",
+    "build": "tsc"
+  },
+  "bin": {
+    "flick": "dist/cli.js"
   },
   "keywords": [],
   "author": "",

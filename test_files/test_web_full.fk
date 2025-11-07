@@ -3,6 +3,7 @@ declare web@3050
 use AuthRoutes
 
 route "/" =>
+    free hello = ""
     respond "Welcome to Flick Web Server!"
 end
 
