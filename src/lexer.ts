@@ -31,6 +31,11 @@ export enum TokenType {
   NO = 'NO',
   NUM = 'NUM',
   LITERAL = 'LITERAL',
+  DECLARE = 'DECLARE',
+
+  // Plugin-specific keywords (dynamically registered)
+  ROUTE = 'ROUTE',
+  RESPOND = 'RESPOND',
 
   // Literals
   STRING = 'STRING',
@@ -62,6 +67,7 @@ export enum TokenType {
   COMMA = 'COMMA',         // ,
   COLON = 'COLON',         // :
   ARROW = 'ARROW',         // =>
+  AT = 'AT',               // @
 
   // Special
   NEWLINE = 'NEWLINE',
@@ -105,6 +111,9 @@ const KEYWORDS: Record<string, TokenType> = {
   'no': TokenType.NO,
   'num': TokenType.NUM,
   'literal': TokenType.LITERAL,
+  'declare': TokenType.DECLARE,
+  'route': TokenType.ROUTE,
+  'respond': TokenType.RESPOND,
 };
 
 export class Lexer {
@@ -340,6 +349,10 @@ export class Lexer {
         case '>':
           this.advance();
           tokens.push({ type: TokenType.GREATER_THAN, value: '>', line, column });
+          continue;
+        case '@':
+          this.advance();
+          tokens.push({ type: TokenType.AT, value: '@', line, column });
           continue;
         case '=':
           // Single = (for initialization in declarations)

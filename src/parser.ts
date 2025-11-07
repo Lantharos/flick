@@ -2,14 +2,17 @@
 
 import { Token, TokenType } from './lexer.js';
 import * as AST from './ast.js';
+import { PluginManager } from './plugin.js';
 
 export class Parser {
   private tokens: Token[];
   private position: number = 0;
+  private pluginManager: PluginManager;
 
-  constructor(tokens: Token[]) {
+  constructor(tokens: Token[], pluginManager: PluginManager) {
     // Filter out newline tokens for easier parsing
     this.tokens = tokens.filter(t => t.type !== TokenType.NEWLINE);
+    this.pluginManager = pluginManager;
   }
 
   private peek(offset: number = 0): Token {
@@ -36,6 +39,11 @@ export class Parser {
   public parse(): AST.ProgramNode {
     const body: AST.ASTNode[] = [];
 
+    // Parse declare statements first (must be at top of file)
+    while (this.match(TokenType.DECLARE)) {
+      body.push(this.parseDeclareStatement());
+    }
+
     while (!this.match(TokenType.EOF)) {
       body.push(this.parseTopLevelStatement());
     }
@@ -44,6 +52,14 @@ export class Parser {
   }
 
   private parseTopLevelStatement(): AST.ASTNode {
+    // Check for plugin-specific statements
+    if (this.match(TokenType.ROUTE)) {
+      if (!this.pluginManager.isDeclared('web')) {
+        throw new Error(`Feature 'route' requires declare web at top of file`);
+      }
+      return this.parseRouteStatement();
+    }
+
     if (this.match(TokenType.GROUP)) {
       return this.parseGroupDeclaration();
     }
@@ -60,6 +76,56 @@ export class Parser {
       return this.parseVariableDeclaration();
     }
     return this.parseStatement();
+  }
+
+  private parseDeclareStatement(): AST.DeclareStatementNode {
+    this.expect(TokenType.DECLARE);
+    const plugin = this.expect(TokenType.IDENTIFIER).value;
+
+    let argument: AST.ASTNode | undefined;
+    if (this.match(TokenType.AT)) {
+      this.advance();
+      // Parse the argument (could be number, string, or identifier)
+      if (this.match(TokenType.NUMBER)) {
+        const value = parseFloat(this.advance().value);
+        argument = { type: 'Literal', value, raw: String(value) };
+      } else if (this.match(TokenType.STRING)) {
+        const value = this.advance().value;
+        argument = { type: 'Literal', value, raw: value };
+      } else if (this.match(TokenType.IDENTIFIER)) {
+        const name = this.advance().value;
+        argument = { type: 'Identifier', name };
+      }
+    }
+
+    // Register with plugin manager
+    this.pluginManager.declarePlugin(plugin, argument);
+
+    return { type: 'DeclareStatement', plugin, argument };
+  }
+
+  private parseRouteStatement(): AST.RouteStatementNode {
+    this.expect(TokenType.ROUTE);
+    const path = this.expect(TokenType.STRING).value;
+
+    // Check for forwarding syntax: route "/auth" -> AuthRoutes
+    if (this.match(TokenType.MINUS) && this.peek(1).type === TokenType.GREATER_THAN) {
+      this.advance(); // consume -
+      this.advance(); // consume >
+      const forward = this.expect(TokenType.IDENTIFIER).value;
+      return { type: 'RouteStatement', path, forward };
+    }
+
+    this.expect(TokenType.ARROW);
+
+    const body: AST.ASTNode[] = [];
+    while (!this.match(TokenType.END)) {
+      body.push(this.parseStatement());
+    }
+
+    this.expect(TokenType.END);
+
+    return { type: 'RouteStatement', path, body };
   }
 
   private parseGroupDeclaration(): AST.GroupDeclarationNode {
@@ -213,6 +279,13 @@ export class Parser {
   }
 
   private parseStatement(): AST.ASTNode {
+    if (this.match(TokenType.RESPOND)) {
+      if (!this.pluginManager.isDeclared('web')) {
+        throw new Error(`Feature 'respond' requires declare web at top of file`);
+      }
+      return this.parseRespondStatement();
+    }
+
     if (this.match(TokenType.PRINT)) {
       return this.parsePrintStatement();
     }
@@ -243,6 +316,12 @@ export class Parser {
     }
 
     return { type: 'ExpressionStatement', expression: expr };
+  }
+
+  private parseRespondStatement(): AST.RespondStatementNode {
+    this.expect(TokenType.RESPOND);
+    const content = this.parseExpression();
+    return { type: 'RespondStatement', content };
   }
 
   private parsePrintStatement(): AST.PrintStatementNode {
@@ -468,7 +547,7 @@ export class Parser {
         };
       } else if (
         this.match(TokenType.LPAREN) ||
-        (this.match(TokenType.STRING, TokenType.NUMBER) &&
+        (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER) &&
           (expr.type === 'Identifier' || expr.type === 'MemberExpression'))
       ) {
         // Function call
@@ -484,15 +563,19 @@ export class Parser {
           }
           this.expect(TokenType.RPAREN);
         } else {
-          // Space-separated arguments
+          // Space-separated arguments (without parentheses)
+          // Keep parsing while we see valid argument tokens
           while (
-            this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER) &&
-            !this.match(TokenType.ARROW, TokenType.ASSIGN)
+            (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER)) &&
+            !this.match(TokenType.ARROW, TokenType.ASSIGN, TokenType.EOF, TokenType.END,
+                       TokenType.NEWLINE, TokenType.MAYBE, TokenType.OTHERWISE)
           ) {
             args.push(this.parsePrimaryExpression());
             if (this.match(TokenType.COMMA)) {
               this.advance();
-            } else {
+            }
+            // Stop if next token is not an argument-like token
+            if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.COMMA)) {
               break;
             }
           }

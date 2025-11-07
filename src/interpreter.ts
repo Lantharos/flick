@@ -2,6 +2,7 @@
 
 import * as AST from './ast.js';
 import * as readline from 'node:readline';
+import { PluginManager, PluginContext } from './plugin.js';
 
 // Runtime values
 type RuntimeValue = any;
@@ -28,28 +29,54 @@ export class Interpreter {
   private groups: Map<string, GroupDefinition> = new Map();
   private blueprints: Map<string, BlueprintDefinition> = new Map();
   private output: string[] = [];
+  private pluginManager: PluginManager;
+  private programAST: AST.ProgramNode | null = null;
 
-  constructor() {
+  constructor(pluginManager: PluginManager) {
     this.globalEnv = { vars: new Map() };
+    this.pluginManager = pluginManager;
   }
 
   public async interpret(ast: AST.ProgramNode): Promise<void> {
+    this.programAST = ast;
+
+    // Store references for plugins
+    (this.globalEnv as any).__interpreter = this;
+    (this.globalEnv as any).__program = ast;
+
     for (const statement of ast.body) {
       await this.evaluateStatement(statement, this.globalEnv);
     }
+
+    // Run plugin completion hooks
+    const context: PluginContext = {
+      declaredPlugins: this.pluginManager.getDeclaredPlugins(),
+      env: this.globalEnv
+    };
+
+    await this.pluginManager.runFileCompleteHooks(context);
   }
 
   public getOutput(): string[] {
     return this.output;
   }
 
-  private async evaluateStatement(node: AST.ASTNode, env: Environment): Promise<RuntimeValue> {
+  public async evaluateStatement(node: AST.ASTNode, env: Environment): Promise<RuntimeValue> {
     switch (node.type) {
       case 'Program':
         for (const statement of node.body) {
           await this.evaluateStatement(statement, env);
         }
         return null;
+
+      case 'DeclareStatement':
+        return this.handleDeclare(node, env);
+
+      case 'RouteStatement':
+        return this.handleRoute(node, env);
+
+      case 'RespondStatement':
+        return this.handleRespond(node, env);
 
       case 'GroupDeclaration':
         return this.defineGroup(node, env);
@@ -105,7 +132,7 @@ export class Interpreter {
     }
   }
 
-  private async evaluateExpression(node: AST.ASTNode, env: Environment): Promise<RuntimeValue> {
+  public async evaluateExpression(node: AST.ASTNode, env: Environment): Promise<RuntimeValue> {
     switch (node.type) {
       case 'Literal':
         return node.value;
@@ -143,8 +170,42 @@ export class Interpreter {
         return await this.evaluateAsk(node, env);
 
       default:
-        throw new Error(`Unknown expression type: ${(node as any).type}`);
+        throw new Error(`Unknown statement type: ${(node as any).type}`);
     }
+  }
+
+  private async handleDeclare(node: AST.DeclareStatementNode, env: Environment): Promise<RuntimeValue> {
+    const plugin = this.pluginManager.getPlugin(node.plugin);
+    if (!plugin) {
+      throw new Error(`Unknown plugin: ${node.plugin}`);
+    }
+
+    // Extract argument value if present
+    let argValue = null;
+    if (node.argument) {
+      argValue = await this.evaluateExpression(node.argument, env);
+    }
+
+    // Register plugin built-ins
+    if (plugin.registerBuiltins) {
+      plugin.registerBuiltins(env, argValue);
+    }
+
+    return null;
+  }
+
+  private async handleRoute(node: AST.RouteStatementNode, env: Environment): Promise<RuntimeValue> {
+    // Routes are collected by the web plugin during onFileComplete
+    // Just return null here
+    return null;
+  }
+
+  private async handleRespond(node: AST.RespondStatementNode, env: Environment): Promise<RuntimeValue> {
+    const plugin = this.pluginManager.getPlugin('web');
+    if (plugin?.execute) {
+      return await plugin.execute(node, this, env);
+    }
+    return null;
   }
 
   private defineGroup(node: AST.GroupDeclarationNode, env: Environment): RuntimeValue {
@@ -348,7 +409,13 @@ export class Interpreter {
     const parts: string[] = [];
 
     for (const expr of node.expressions) {
-      const value = await this.evaluateExpression(expr, env);
+      let value = await this.evaluateExpression(expr, env);
+
+      // If the value is a function and the expression is just an identifier, call it with no args
+      if (typeof value === 'function' && expr.type === 'Identifier') {
+        value = await value();
+      }
+
       parts.push(this.stringify(value));
     }
 
@@ -561,7 +628,7 @@ export class Interpreter {
     return true;
   }
 
-  private stringify(value: RuntimeValue): string {
+  public stringify(value: RuntimeValue): string {
     if (typeof value === 'string') {
       return value;
     }

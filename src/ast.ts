@@ -22,7 +22,11 @@ export type ASTNode =
   | IdentifierNode
   | ArrayLiteralNode
   | ObjectLiteralNode
-  | AskExpressionNode;
+  | AskExpressionNode
+  | DeclareStatementNode
+  | RouteStatementNode
+  | RespondStatementNode
+  | PluginStatementNode;
 
 export interface ProgramNode {
   type: 'Program';
@@ -166,5 +170,29 @@ export interface ObjectLiteralNode {
 export interface AskExpressionNode {
   type: 'AskExpression';
   prompt: ASTNode;
+}
+
+export interface DeclareStatementNode {
+  type: 'DeclareStatement';
+  plugin: string;
+  argument?: ASTNode;
+}
+
+export interface RouteStatementNode {
+  type: 'RouteStatement';
+  path: string;
+  body?: ASTNode[];
+  forward?: string; // identifier to forward to
+}
+
+export interface RespondStatementNode {
+  type: 'RespondStatement';
+  content: ASTNode;
+}
+
+export interface PluginStatementNode {
+  type: 'PluginStatement';
+  pluginName: string;
+  data: any;
 }
 
