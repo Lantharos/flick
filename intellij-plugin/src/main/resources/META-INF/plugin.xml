@@ -23,6 +23,57 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
+        <!-- File Type -->
+        <fileType
+            name="Flick"
+            implementationClass="com.lantharos.flick.FlickFileType"
+            fieldName="INSTANCE"
+            language="Flick"
+            extensions="fk"/>
 
+        <!-- Language -->
+        <lang.parserDefinition
+            language="Flick"
+            implementationClass="com.lantharos.flick.FlickParserDefinition"/>
+
+        <!-- Syntax Highlighting -->
+        <lang.syntaxHighlighterFactory
+            language="Flick"
+            implementationClass="com.lantharos.flick.FlickSyntaxHighlighterFactory"/>
+
+        <!-- Code Completion -->
+        <completion.contributor
+            language="Flick"
+            implementationClass="com.lantharos.flick.FlickCompletionContributor"/>
+
+        <!-- Commenter -->
+        <lang.commenter
+            language="Flick"
+            implementationClass="com.lantharos.flick.FlickCommenter"/>
+
+        <!-- Brace Matcher -->
+        <lang.braceMatcher
+            language="Flick"
+            implementationClass="com.lantharos.flick.FlickBraceMatcher"/>
+
+        <!-- Formatter - DISABLED to avoid conflicts with EnterHandler -->
+        <!--
+        <lang.formatter
+            language="Flick"
+            implementationClass="com.lantharos.flick.FlickFormattingModelBuilder"/>
+        -->
+
+        <!-- Enter Handler for smart indentation -->
+        <enterHandlerDelegate
+            implementation="com.lantharos.flick.FlickEnterHandler"/>
+
+        <!-- Annotator for errors and warnings -->
+        <annotator
+            language="Flick"
+            implementationClass="com.lantharos.flick.FlickAnnotator"/>
+
+        <!-- Typed Handler for auto-indentation -->
+        <typedHandler
+            implementation="com.lantharos.flick.FlickTypedHandler"/>
     </extensions>
 </idea-plugin>

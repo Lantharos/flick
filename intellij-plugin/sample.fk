@@ -1,0 +1,82 @@
+# Sample Flick Code for Testing IntelliJ Plugin
+
+# Variable declarations
+free name = "Alice"
+lock maxUsers = 100
+
+# Groups (classes)
+group Player {
+    free num health = 100
+    free literal playerName
+
+    task greet =>
+        print "Hello, I am " and playerName
+    end
+
+    task takeDamage with num(amount) =>
+        health := health - amount
+        print playerName and " took damage! Health: " and health
+    end
+}
+
+# Create instance
+free Player p = Player "Bob"
+p/greet
+p/takeDamage 25
+
+# Control flow
+free age = 25
+assume age >= 18 =>
+    print "Adult"
+maybe age >= 13 =>
+    print "Teenager"
+otherwise =>
+    print "Child"
+end
+
+# Loops
+free fruits = ["apple", "banana", "cherry"]
+each fruit in fruits =>
+    print "- " and fruit
+end
+
+march i from 1 to 5 =>
+    print "Number: " and i
+end
+
+# Web plugin
+declare web@3000
+
+route GET "/" =>
+    respond "Welcome to Flick!"
+end
+
+route POST "/api/data" =>
+    free data = body
+    respond json=data, status=201
+end
+
+# File operations
+declare files
+
+free content = read "config.txt"
+write "output.txt", "Hello World"
+
+# JavaScript imports
+import {readFileSync} from "node:fs"
+
+free fileContent = readFileSync "package.json", "utf-8"
+print fileContent
+
+# JSON operations
+free config = {"env": "production", "port": 8080}
+free jsonStr = JSON.stringify config
+print jsonStr
+
+# Tasks (functions)
+task greetUser with literal(username) =>
+    print "Welcome, " and username
+end
+
+greetUser "Alice"
+

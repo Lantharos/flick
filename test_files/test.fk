@@ -56,4 +56,3 @@ task doSomething with literal(sus), num(meow) =>
 end
 
 doSomething "Amogus", 10
-
