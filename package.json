@@ -1,6 +1,7 @@
 {
   "name": "runflick",
-  "version": "1.0.0",
+  "repository": "https://github.com/Lantharos/flick.git",
+  "version": "1.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
