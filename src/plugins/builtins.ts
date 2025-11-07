@@ -1,9 +1,34 @@
 // Built-in plugins for Flick
 
-import { Plugin, PluginContext } from '../plugin.js';
-import * as AST from '../ast.js';
+import { Plugin, PluginContext } from './plugin.js';
+import * as AST from './ast.js';
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+
+// Helper function to parse request body
+async function parseRequestBody(req: IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        // Try to parse as JSON if content-type is application/json
+        const contentType = req.headers['content-type'] || '';
+        if (contentType.includes('application/json') && body) {
+          resolve(JSON.parse(body));
+        } else {
+          // Return raw body as string
+          resolve(body);
+        }
+      } catch (error) {
+        resolve(body); // If JSON parsing fails, return raw body
+      }
+    });
+    req.on('error', reject);
+  });
+}
 
 // Web Plugin (Gazelle)
 export const WebPlugin: Plugin = {
@@ -11,7 +36,12 @@ export const WebPlugin: Plugin = {
 
   onDeclare(args: any) {
     const port = args?.value || 3000;
-    console.log(`[Gazelle] Web plugin declared on port ${port}`);
+    const isModule = typeof args?.value === 'string' && args.value === 'module';
+    if (isModule) {
+      console.log(`[Gazelle] Web module declared (no server will start)`);
+    } else {
+      console.log(`[Gazelle] Web plugin declared on port ${port}`);
+    }
   },
 
   registerBuiltins(env: any, args: any) {
@@ -26,30 +56,63 @@ export const WebPlugin: Plugin = {
 
     if (node.type === 'RespondStatement') {
       // This is called within a route handler context
-      const content = await interpreter.evaluateExpression(node.content, env);
-      return { __respond: true, content: interpreter.stringify(content) };
+      let content: string;
+      let statusCode = 200;
+      let contentType = 'text/plain';
+
+      if (node.options?.json) {
+        const jsonData = await interpreter.evaluateExpression(node.options.json, env);
+        content = JSON.stringify(jsonData);
+        contentType = 'application/json';
+      } else {
+        content = await interpreter.evaluateExpression(node.content, env);
+        content = interpreter.stringify(content);
+      }
+
+      if (node.options?.status) {
+        statusCode = await interpreter.evaluateExpression(node.options.status, env);
+      }
+
+      return { __respond: true, content, statusCode, contentType };
     }
 
     return null;
   },
 
   async onFileComplete(context: PluginContext) {
-    const port = context.declaredPlugins.get('web')?.value || 3000;
-    const routes = new Map<string, any>();
+    const webDeclaration = context.declaredPlugins.get('web');
+    const isModule = typeof webDeclaration?.value === 'string' && webDeclaration.value === 'module';
+
+    // Don't start server for modules
+    if (isModule) {
+      return;
+    }
+
+    const port = webDeclaration?.value || 3000;
+    const routes = new Map<string, any>(); // key: "METHOD:path"
 
     // Collect all routes from the AST
-    const collectRoutes = (node: any): void => {
+    const collectRoutes = (node: any, prefix: string = ''): void => {
       if (!node) return;
 
       if (node.type === 'RouteStatement') {
-        routes.set(node.path, node);
+        const method = node.method || 'GET';
+        const fullPath = prefix + node.path;
+        const key = `${method}:${fullPath}`;
+
+        if (node.forward) {
+          // This is a forwarding route
+          routes.set(key, { ...node, fullPath, method, isForwarding: true });
+        } else {
+          routes.set(key, { ...node, fullPath, method });
+        }
       }
 
       if (node.body && Array.isArray(node.body)) {
-        node.body.forEach(collectRoutes);
+        node.body.forEach((child: any) => collectRoutes(child, prefix));
       }
       if (node.type === 'Program' && node.body) {
-        node.body.forEach(collectRoutes);
+        node.body.forEach((child: any) => collectRoutes(child, prefix));
       }
     };
 
@@ -65,13 +128,37 @@ export const WebPlugin: Plugin = {
 
     console.log(`[Gazelle] Starting server on port ${port}...`);
     console.log(`[Gazelle] Registered routes:`);
-    for (const path of routes.keys()) {
-      console.log(`  - ${path}`);
+    for (const [key, route] of routes) {
+      const method = route.isForwarding ? 'ALL' : (route.method || 'GET');
+      console.log(`  - ${method} ${route.fullPath}${route.forward ? ` -> ${route.forward}` : ''}`);
     }
 
     const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const url = req.url || '/';
-      const route = routes.get(url);
+      const method = req.method || 'GET';
+      const key = `${method}:${url}`;
+
+      // Try to find exact match first
+      let route = routes.get(key);
+
+      // If not found, try GET as default for exact matches
+      if (!route && method === 'GET') {
+        route = routes.get(`GET:${url}`);
+      }
+
+      // If still not found, check for forwarding routes (any method can match a forwarding route)
+      if (!route) {
+        for (const [routeKey, routeData] of routes) {
+          if (routeData.isForwarding) {
+            const [, routePath] = routeKey.split(':');
+            // Check if URL starts with the forward path
+            if (url.startsWith(routePath)) {
+              route = routeData;
+              break;
+            }
+          }
+        }
+      }
 
       if (!route) {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -80,26 +167,109 @@ export const WebPlugin: Plugin = {
       }
 
       try {
-        if (route.forward) {
-          // Handle forwarding
-          res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end(`Forwarding to ${route.forward} (not fully implemented)`);
+        // Parse request body
+        const requestBody = await parseRequestBody(req);
+
+        // Parse query parameters using modern URL API
+        const fullUrl = `http://${req.headers.host || 'localhost'}${req.url || ''}`;
+        const parsedUrl = new URL(fullUrl);
+        const queryParams: Record<string, any> = {};
+        parsedUrl.searchParams.forEach((value, key) => {
+          queryParams[key] = value;
+        });
+
+        // Get headers
+        const headers = req.headers;
+
+        if (route.isForwarding && route.forward) {
+          // Handle forwarding - look up the module in environment
+          const forwardTarget = context.env.vars.get(route.forward);
+          if (!forwardTarget) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end(`Forward target not found: ${route.forward}`);
+            return;
+          }
+
+          const forwardedRoutes = forwardTarget.value.__routes || [];
+
+          // Calculate the remaining path after the forward prefix
+          const remainingPath = url.substring(route.fullPath.length) || '/';
+
+          // Find matching route in forwarded module (match by METHOD and path)
+          let matchedRoute = null;
+          for (const fRoute of forwardedRoutes) {
+            const fMethod = fRoute.method || 'GET';
+            if (fMethod === method && fRoute.path === remainingPath) {
+              matchedRoute = fRoute;
+              break;
+            }
+          }
+
+          if (!matchedRoute) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end(`Not Found in forwarded routes (looking for ${method} ${remainingPath})`);
+            return;
+          }
+
+          // Create a route-scoped environment with request data
+          const routeEnv = {
+            vars: new Map([
+              ['req', { value: { method, url, headers, body: requestBody }, mutable: false }],
+              ['body', { value: requestBody, mutable: false }],
+              ['query', { value: queryParams, mutable: false }],
+              ['headers', { value: headers, mutable: false }],
+            ]),
+            parent: forwardTarget.value.__env
+          };
+
+          // Execute forwarded route
+          const interpreter = context.env.__interpreter;
+          let responseContent = '';
+          let statusCode = 200;
+          let contentType = 'text/plain';
+
+          for (const statement of matchedRoute.body || []) {
+            const result = await interpreter.evaluateStatement(statement, routeEnv);
+            if (result && result.__respond) {
+              responseContent = result.content;
+              statusCode = result.statusCode || 200;
+              contentType = result.contentType || 'text/plain';
+            }
+          }
+
+          res.writeHead(statusCode, { 'Content-Type': contentType });
+          res.end(responseContent || 'OK');
           return;
         }
 
         if (route.body) {
+          // Create a route-scoped environment with request data
+          const routeEnv = {
+            vars: new Map([
+              ['req', { value: { method, url, headers, body: requestBody }, mutable: false }],
+              ['body', { value: requestBody, mutable: false }],
+              ['query', { value: queryParams, mutable: false }],
+              ['headers', { value: headers, mutable: false }],
+            ]),
+            parent: context.env
+          };
+
           // Execute route handler
           const interpreter = context.env.__interpreter;
           let responseContent = '';
+          let statusCode = 200;
+          let contentType = 'text/plain';
 
           for (const statement of route.body) {
-            const result = await interpreter.evaluateStatement(statement, context.env);
+            const result = await interpreter.evaluateStatement(statement, routeEnv);
             if (result && result.__respond) {
               responseContent = result.content;
+              statusCode = result.statusCode || 200;
+              contentType = result.contentType || 'text/plain';
             }
           }
 
-          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.writeHead(statusCode, { 'Content-Type': contentType });
           res.end(responseContent || 'OK');
         }
       } catch (error) {

@@ -30,7 +30,7 @@ async function runFlick(filePath: string): Promise<void> {
     const ast = parser.parse();
 
     // Interpret
-    const interpreter = new Interpreter(pluginManager);
+    const interpreter = new Interpreter(pluginManager, filePath);
     await interpreter.interpret(ast);
 
   } catch (error) {
@@ -40,6 +40,6 @@ async function runFlick(filePath: string): Promise<void> {
 }
 
 // Get file path from command line arguments
-const filePath = process.argv[2] || 'test.flick';
+const filePath = process.argv[2] || 'test.fk';
 runFlick(filePath);
 

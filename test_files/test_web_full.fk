@@ -1,0 +1,17 @@
+declare web@3050
+
+use AuthRoutes
+
+route "/" =>
+    respond "Welcome to Flick Web Server!"
+end
+
+route GET "/api/data" =>
+    respond json={"message": "Hello from API", "timestamp": 1234567890}
+end
+
+route POST "/api/create" =>
+    respond json={"created": yes, "id": 42}, status=201
+end
+
+route "/auth" -> AuthRoutes

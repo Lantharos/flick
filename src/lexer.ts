@@ -32,10 +32,18 @@ export enum TokenType {
   NUM = 'NUM',
   LITERAL = 'LITERAL',
   DECLARE = 'DECLARE',
+  USE = 'USE',
 
   // Plugin-specific keywords (dynamically registered)
   ROUTE = 'ROUTE',
   RESPOND = 'RESPOND',
+
+  // HTTP methods
+  GET = 'GET',
+  POST = 'POST',
+  PUT = 'PUT',
+  DELETE = 'DELETE',
+  PATCH = 'PATCH',
 
   // Literals
   STRING = 'STRING',
@@ -112,8 +120,14 @@ const KEYWORDS: Record<string, TokenType> = {
   'num': TokenType.NUM,
   'literal': TokenType.LITERAL,
   'declare': TokenType.DECLARE,
+  'use': TokenType.USE,
   'route': TokenType.ROUTE,
   'respond': TokenType.RESPOND,
+  'GET': TokenType.GET,
+  'POST': TokenType.POST,
+  'PUT': TokenType.PUT,
+  'DELETE': TokenType.DELETE,
+  'PATCH': TokenType.PATCH,
 };
 
 export class Lexer {

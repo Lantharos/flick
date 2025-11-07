@@ -29,7 +29,7 @@ export interface Plugin {
 }
 
 export class PluginManager {
-  private plugins: Map<string, Plugin> = new Map();
+  public plugins: Map<string, Plugin> = new Map();
   private declaredPlugins: Map<string, any> = new Map();
 
   registerPlugin(plugin: Plugin): void {

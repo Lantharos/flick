@@ -3,6 +3,8 @@
 import * as AST from './ast.js';
 import * as readline from 'node:readline';
 import { PluginManager, PluginContext } from './plugin.js';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
 
 // Runtime values
 type RuntimeValue = any;
@@ -31,10 +33,27 @@ export class Interpreter {
   private output: string[] = [];
   private pluginManager: PluginManager;
   private programAST: AST.ProgramNode | null = null;
+  private currentFilePath: string = '';
+  private loadedModules: Map<string, any> = new Map();
 
-  constructor(pluginManager: PluginManager) {
+  constructor(pluginManager: PluginManager, filePath?: string) {
     this.globalEnv = { vars: new Map() };
     this.pluginManager = pluginManager;
+    this.currentFilePath = filePath || '';
+
+    // Add built-in functions
+    this.globalEnv.vars.set('num', {
+      value: (val: any) => {
+        const parsed = parseFloat(val);
+        return isNaN(parsed) ? 0 : parsed;
+      },
+      mutable: false
+    });
+
+    this.globalEnv.vars.set('str', {
+      value: (val: any) => String(val),
+      mutable: false
+    });
   }
 
   public async interpret(ast: AST.ProgramNode): Promise<void> {
@@ -71,6 +90,9 @@ export class Interpreter {
 
       case 'DeclareStatement':
         return this.handleDeclare(node, env);
+
+      case 'UseStatement':
+        return await this.handleUse(node, env);
 
       case 'RouteStatement':
         return this.handleRoute(node, env);
@@ -171,6 +193,73 @@ export class Interpreter {
 
       default:
         throw new Error(`Unknown statement type: ${(node as any).type}`);
+    }
+  }
+
+  private async handleUse(node: AST.UseStatementNode, env: Environment): Promise<RuntimeValue> {
+    let modulePath: string;
+
+    if (node.path) {
+      // Explicit path provided
+      const baseDir = dirname(this.currentFilePath);
+      modulePath = resolve(baseDir, node.path);
+    } else {
+      // Infer from name (same directory, name.fk)
+      const baseDir = dirname(this.currentFilePath);
+      modulePath = join(baseDir, `${node.name}.fk`);
+    }
+
+    // Check if already loaded
+    if (this.loadedModules.has(modulePath)) {
+      const moduleExports = this.loadedModules.get(modulePath);
+      env.vars.set(node.name, { value: moduleExports, mutable: false });
+      return null;
+    }
+
+    // Load and parse the module
+    try {
+      const { Lexer } = await import('./lexer.js');
+      const { Parser } = await import('./parser.js');
+
+      const sourceCode = readFileSync(modulePath, 'utf-8');
+      const lexer = new Lexer(sourceCode);
+      const tokens = lexer.tokenize();
+
+      // Create a new plugin manager for the module (inherits declared plugins)
+      const modulePluginManager = new PluginManager();
+      // Copy plugins from current manager
+      for (const [name, plugin] of (this.pluginManager as any).plugins) {
+        modulePluginManager.registerPlugin(plugin);
+      }
+
+      const parser = new Parser(tokens, modulePluginManager);
+      const ast = parser.parse();
+
+      // Create a new interpreter for the module (without running completion hooks)
+      const moduleInterpreter = new Interpreter(modulePluginManager, modulePath);
+
+      // Execute the module AST but don't run plugin completion hooks
+      (moduleInterpreter as any).programAST = ast;
+      (moduleInterpreter as any).globalEnv.__interpreter = moduleInterpreter;
+      (moduleInterpreter as any).globalEnv.__program = ast;
+
+      for (const statement of ast.body) {
+        await moduleInterpreter.evaluateStatement(statement, (moduleInterpreter as any).globalEnv);
+      }
+
+      // Export the module's environment/program
+      const moduleExports = {
+        __routes: ast.body.filter((n: any) => n.type === 'RouteStatement'),
+        __env: (moduleInterpreter as any).globalEnv,
+        __ast: ast,
+      };
+
+      this.loadedModules.set(modulePath, moduleExports);
+      env.vars.set(node.name, { value: moduleExports, mutable: false });
+
+      return null;
+    } catch (error) {
+      throw new Error(`Failed to load module ${modulePath}: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -431,14 +520,22 @@ export class Interpreter {
       if (branch.condition === null) {
         // otherwise branch
         for (const statement of branch.body) {
-          await this.evaluateStatement(statement, env);
+          const result = await this.evaluateStatement(statement, env);
+          // Propagate respond results
+          if (result && result.__respond) {
+            return result;
+          }
         }
         break;
       } else {
         const condition = await this.evaluateExpression(branch.condition, env);
         if (this.isTruthy(condition)) {
           for (const statement of branch.body) {
-            await this.evaluateStatement(statement, env);
+            const result = await this.evaluateStatement(statement, env);
+            // Propagate respond results
+            if (result && result.__respond) {
+              return result;
+            }
           }
           break;
         }
@@ -515,25 +612,34 @@ export class Interpreter {
 
     switch (node.operator) {
       case '+':
-        return left + right;
+        // If both operands are numeric strings or numbers, do numeric addition
+        const leftNum = typeof left === 'string' ? parseFloat(left) : left;
+        const rightNum = typeof right === 'string' ? parseFloat(right) : right;
+
+        if (typeof leftNum === 'number' && typeof rightNum === 'number' &&
+            !isNaN(leftNum) && !isNaN(rightNum)) {
+          return leftNum + rightNum;
+        }
+        // Otherwise, concatenate as strings
+        return String(left) + String(right);
       case '-':
-        return left - right;
+        return Number(left) - Number(right);
       case '*':
-        return left * right;
+        return Number(left) * Number(right);
       case '/':
-        return left / right;
+        return Number(left) / Number(right);
       case '==':
         return left === right;
       case '!=':
         return left !== right;
       case '<':
-        return left < right;
+        return Number(left) < Number(right);
       case '>':
-        return left > right;
+        return Number(left) > Number(right);
       case '<=':
-        return left <= right;
+        return Number(left) <= Number(right);
       case '>=':
-        return left >= right;
+        return Number(left) >= Number(right);
       default:
         throw new Error(`Unknown binary operator: ${node.operator}`);
     }
@@ -625,6 +731,24 @@ export class Interpreter {
     if (value === null || value === undefined || value === false) {
       return false;
     }
+
+    // Empty string is falsy
+    if (value === '') {
+      return false;
+    }
+
+    // Empty array is falsy
+    if (Array.isArray(value) && value.length === 0) {
+      return false;
+    }
+
+    // Empty object is falsy
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      if (Object.keys(value).length === 0) {
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -664,16 +788,27 @@ export class Interpreter {
         const right = this.evaluateExpressionSync(node.right, env);
 
         switch (node.operator) {
-          case '+': return left + right;
-          case '-': return left - right;
-          case '*': return left * right;
-          case '/': return left / right;
+          case '+': {
+            // If both operands are numeric strings or numbers, do numeric addition
+            const leftNum = typeof left === 'string' ? parseFloat(left) : left;
+            const rightNum = typeof right === 'string' ? parseFloat(right) : right;
+
+            if (typeof leftNum === 'number' && typeof rightNum === 'number' &&
+                !isNaN(leftNum) && !isNaN(rightNum)) {
+              return leftNum + rightNum;
+            }
+            // Otherwise, concatenate as strings
+            return String(left) + String(right);
+          }
+          case '-': return Number(left) - Number(right);
+          case '*': return Number(left) * Number(right);
+          case '/': return Number(left) / Number(right);
           case '==': return left === right;
           case '!=': return left !== right;
-          case '<': return left < right;
-          case '>': return left > right;
-          case '<=': return left <= right;
-          case '>=': return left >= right;
+          case '<': return Number(left) < Number(right);
+          case '>': return Number(left) > Number(right);
+          case '<=': return Number(left) <= Number(right);
+          case '>=': return Number(left) >= Number(right);
           default:
             throw new Error(`Unknown binary operator: ${node.operator}`);
         }

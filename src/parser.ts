@@ -44,6 +44,11 @@ export class Parser {
       body.push(this.parseDeclareStatement());
     }
 
+    // Parse use statements (imports)
+    while (this.match(TokenType.USE)) {
+      body.push(this.parseUseStatement());
+    }
+
     while (!this.match(TokenType.EOF)) {
       body.push(this.parseTopLevelStatement());
     }
@@ -93,8 +98,9 @@ export class Parser {
         const value = this.advance().value;
         argument = { type: 'Literal', value, raw: value };
       } else if (this.match(TokenType.IDENTIFIER)) {
+        // Treat identifier as a string literal (e.g., @module)
         const name = this.advance().value;
-        argument = { type: 'Identifier', name };
+        argument = { type: 'Literal', value: name, raw: name };
       }
     }
 
@@ -104,8 +110,27 @@ export class Parser {
     return { type: 'DeclareStatement', plugin, argument };
   }
 
+  private parseUseStatement(): AST.UseStatementNode {
+    this.expect(TokenType.USE);
+    const name = this.expect(TokenType.IDENTIFIER).value;
+
+    let path: string | undefined;
+    if (this.match(TokenType.STRING)) {
+      path = this.advance().value;
+    }
+
+    return { type: 'UseStatement', name, path };
+  }
+
   private parseRouteStatement(): AST.RouteStatementNode {
     this.expect(TokenType.ROUTE);
+
+    // Check for HTTP method (GET, POST, etc.)
+    let method: string | undefined;
+    if (this.match(TokenType.GET, TokenType.POST, TokenType.PUT, TokenType.DELETE, TokenType.PATCH)) {
+      method = this.advance().value;
+    }
+
     const path = this.expect(TokenType.STRING).value;
 
     // Check for forwarding syntax: route "/auth" -> AuthRoutes
@@ -113,7 +138,7 @@ export class Parser {
       this.advance(); // consume -
       this.advance(); // consume >
       const forward = this.expect(TokenType.IDENTIFIER).value;
-      return { type: 'RouteStatement', path, forward };
+      return { type: 'RouteStatement', method, path, forward };
     }
 
     this.expect(TokenType.ARROW);
@@ -125,7 +150,7 @@ export class Parser {
 
     this.expect(TokenType.END);
 
-    return { type: 'RouteStatement', path, body };
+    return { type: 'RouteStatement', method, path, body };
   }
 
   private parseGroupDeclaration(): AST.GroupDeclarationNode {
@@ -320,8 +345,31 @@ export class Parser {
 
   private parseRespondStatement(): AST.RespondStatementNode {
     this.expect(TokenType.RESPOND);
-    const content = this.parseExpression();
-    return { type: 'RespondStatement', content };
+
+    let content: AST.ASTNode;
+    let options: { json?: AST.ASTNode; status?: AST.ASTNode } = {};
+
+    // Check if we have json= or just a regular expression
+    if (this.match(TokenType.IDENTIFIER) && this.peek().value === 'json' && this.peek(1).type === TokenType.ASSIGN) {
+      this.advance(); // consume 'json'
+      this.advance(); // consume '='
+      options.json = this.parseExpression();
+      content = { type: 'Literal', value: '', raw: '' }; // dummy content
+    } else {
+      content = this.parseExpression();
+    }
+
+    // Check for status=
+    if (this.match(TokenType.COMMA)) {
+      this.advance();
+      if (this.match(TokenType.IDENTIFIER) && this.peek().value === 'status' && this.peek(1).type === TokenType.ASSIGN) {
+        this.advance(); // consume 'status'
+        this.advance(); // consume '='
+        options.status = this.parseExpression();
+      }
+    }
+
+    return { type: 'RespondStatement', content, options };
   }
 
   private parsePrintStatement(): AST.PrintStatementNode {
@@ -565,17 +613,32 @@ export class Parser {
         } else {
           // Space-separated arguments (without parentheses)
           // Keep parsing while we see valid argument tokens
-          while (
-            (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER)) &&
-            !this.match(TokenType.ARROW, TokenType.ASSIGN, TokenType.EOF, TokenType.END,
-                       TokenType.NEWLINE, TokenType.MAYBE, TokenType.OTHERWISE)
-          ) {
+          // Stop at statement keywords or structural tokens
+          while (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER)) {
+            // Before consuming the token, check if it's a statement keyword
+            if (this.match(TokenType.FREE, TokenType.LOCK, TokenType.PRINT, TokenType.ASSUME,
+                          TokenType.EACH, TokenType.MARCH, TokenType.SELECT, TokenType.ROUTE,
+                          TokenType.RESPOND, TokenType.TASK, TokenType.GROUP, TokenType.BLUEPRINT,
+                          TokenType.DO, TokenType.DECLARE, TokenType.USE)) {
+              break;
+            }
+
+            // Check for structural/ending tokens
+            if (this.match(TokenType.ARROW, TokenType.ASSIGN, TokenType.EOF, TokenType.END,
+                          TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE)) {
+              break;
+            }
+
             args.push(this.parsePrimaryExpression());
+
+            // After parsing an arg, check if we should continue
             if (this.match(TokenType.COMMA)) {
               this.advance();
+              continue;
             }
-            // Stop if next token is not an argument-like token
-            if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.COMMA)) {
+
+            // Stop if next token is not an argument-like token or is a keyword
+            if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER)) {
               break;
             }
           }
@@ -618,7 +681,21 @@ export class Parser {
     // Ask expression
     if (this.match(TokenType.ASK)) {
       this.advance();
-      const prompt = this.parseExpression();
+
+      // Check if there's an argument for the prompt, or if we should use empty string
+      let prompt: AST.ASTNode;
+
+      // If next token is a statement keyword or assignment or EOF, use empty prompt
+      if (this.match(TokenType.FREE, TokenType.LOCK, TokenType.PRINT, TokenType.ASSUME,
+                    TokenType.EACH, TokenType.MARCH, TokenType.SELECT, TokenType.ROUTE,
+                    TokenType.RESPOND, TokenType.TASK, TokenType.GROUP, TokenType.BLUEPRINT,
+                    TokenType.DO, TokenType.DECLARE, TokenType.USE, TokenType.EOF,
+                    TokenType.END, TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE)) {
+        prompt = { type: 'Literal', value: '', raw: '' };
+      } else {
+        prompt = this.parseExpression();
+      }
+
       return { type: 'AskExpression', prompt };
     }
 

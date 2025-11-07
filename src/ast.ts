@@ -26,7 +26,8 @@ export type ASTNode =
   | DeclareStatementNode
   | RouteStatementNode
   | RespondStatementNode
-  | PluginStatementNode;
+  | PluginStatementNode
+  | UseStatementNode;
 
 export interface ProgramNode {
   type: 'Program';
@@ -180,6 +181,7 @@ export interface DeclareStatementNode {
 
 export interface RouteStatementNode {
   type: 'RouteStatement';
+  method?: string; // GET, POST, PUT, DELETE, PATCH
   path: string;
   body?: ASTNode[];
   forward?: string; // identifier to forward to
@@ -188,11 +190,21 @@ export interface RouteStatementNode {
 export interface RespondStatementNode {
   type: 'RespondStatement';
   content: ASTNode;
+  options?: {
+    json?: ASTNode;
+    status?: ASTNode;
+  };
 }
 
 export interface PluginStatementNode {
   type: 'PluginStatement';
   pluginName: string;
   data: any;
+}
+
+export interface UseStatementNode {
+  type: 'UseStatement';
+  name: string;
+  path?: string;
 }
 
