@@ -44,6 +44,11 @@ export class Parser {
       body.push(this.parseDeclareStatement());
     }
 
+    // Parse import statements (for JS/TS modules)
+    while (this.match(TokenType.IMPORT)) {
+      body.push(this.parseImportStatement());
+    }
+
     // Parse use statements (imports)
     while (this.match(TokenType.USE)) {
       body.push(this.parseUseStatement());
@@ -120,6 +125,45 @@ export class Parser {
     }
 
     return { type: 'UseStatement', name, path };
+  }
+
+  private parseImportStatement(): AST.ImportStatementNode {
+    this.expect(TokenType.IMPORT);
+
+    const names: string[] = [];
+    let alias: string | undefined;
+    let isDefaultImport = false;
+
+    // Handle different import patterns:
+    // import fs from "fs"                    - default import
+    // import {readFile, writeFile} from "fs" - named imports
+    // import * from "lodash"                 - namespace import
+
+    if (this.match(TokenType.MULTIPLY)) {
+      // import * from "module"
+      this.advance();
+      names.push('*');
+    } else if (this.match(TokenType.LBRACE)) {
+      // import {a, b, c} from "module"
+      this.advance();
+      while (!this.match(TokenType.RBRACE)) {
+        names.push(this.expect(TokenType.IDENTIFIER).value);
+        if (this.match(TokenType.COMMA)) {
+          this.advance();
+        }
+      }
+      this.expect(TokenType.RBRACE);
+      isDefaultImport = false;
+    } else {
+      // import defaultExport from "module"
+      names.push(this.expect(TokenType.IDENTIFIER).value);
+      isDefaultImport = true;
+    }
+
+    this.expect(TokenType.FROM);
+    const from = this.expect(TokenType.STRING).value;
+
+    return { type: 'ImportStatement', names, from, alias, isDefaultImport };
   }
 
   private parseRouteStatement(): AST.RouteStatementNode {
@@ -595,7 +639,7 @@ export class Parser {
         };
       } else if (
         this.match(TokenType.LPAREN) ||
-        (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER) &&
+        (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET) &&
           (expr.type === 'Identifier' || expr.type === 'MemberExpression'))
       ) {
         // Function call
@@ -614,7 +658,7 @@ export class Parser {
           // Space-separated arguments (without parentheses)
           // Keep parsing while we see valid argument tokens
           // Stop at statement keywords or structural tokens
-          while (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER)) {
+          while (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET)) {
             // Before consuming the token, check if it's a statement keyword
             if (this.match(TokenType.FREE, TokenType.LOCK, TokenType.PRINT, TokenType.ASSUME,
                           TokenType.EACH, TokenType.MARCH, TokenType.SELECT, TokenType.ROUTE,
@@ -638,7 +682,7 @@ export class Parser {
             }
 
             // Stop if next token is not an argument-like token or is a keyword
-            if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER)) {
+            if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET)) {
               break;
             }
           }

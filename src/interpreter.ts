@@ -54,6 +54,15 @@ export class Interpreter {
       value: (val: any) => String(val),
       mutable: false
     });
+
+    // Add JSON object for parsing and stringifying
+    this.globalEnv.vars.set('JSON', {
+      value: {
+        stringify: async (val: any, space?: number) => JSON.stringify(val, null, space),
+        parse: async (str: string) => JSON.parse(str),
+      },
+      mutable: false
+    });
   }
 
   public async interpret(ast: AST.ProgramNode): Promise<void> {
@@ -93,6 +102,9 @@ export class Interpreter {
 
       case 'UseStatement':
         return await this.handleUse(node, env);
+
+      case 'ImportStatement':
+        return await this.handleImport(node, env);
 
       case 'RouteStatement':
         return this.handleRoute(node, env);
@@ -194,6 +206,90 @@ export class Interpreter {
       default:
         throw new Error(`Unknown statement type: ${(node as any).type}`);
     }
+  }
+
+  private async handleImport(node: AST.ImportStatementNode, env: Environment): Promise<RuntimeValue> {
+    try {
+      let modulePath = node.from;
+
+      // If it's a relative path, resolve it relative to current file
+      if (modulePath.startsWith('.')) {
+        const baseDir = dirname(this.currentFilePath);
+        modulePath = resolve(baseDir, modulePath);
+      }
+
+      // Dynamically import the module
+      const importedModule = await import(modulePath);
+
+      // Handle different import patterns
+      if (node.names.includes('*')) {
+        // import * from "module" - import entire module
+        const moduleName = node.names[0] === '*' && node.names.length === 1
+          ? modulePath.split('/').pop()?.replace(/\.[^/.]+$/, '') || 'module'
+          : node.names[0];
+
+        // Wrap the module so functions can be called with Flick syntax
+        const wrappedModule = this.wrapModuleExports(importedModule);
+        env.vars.set(moduleName, { value: wrappedModule, mutable: false });
+      } else if (node.isDefaultImport) {
+        // Default import: import fs from "fs"
+        const name = node.names[0];
+        const defaultExport = importedModule.default || importedModule;
+        const wrapped = this.wrapModuleExports(defaultExport);
+        env.vars.set(name, { value: wrapped, mutable: false });
+      } else {
+        // Named imports: import {readFile, writeFile} from "fs"
+        for (const name of node.names) {
+          if (importedModule[name] !== undefined) {
+            const wrapped = typeof importedModule[name] === 'function'
+              ? this.wrapFunction(importedModule[name])
+              : importedModule[name];
+            env.vars.set(name, { value: wrapped, mutable: false });
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      throw new Error(`Failed to import module ${node.from}: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  // Wrap JS/TS functions to work with Flick's calling convention
+  private wrapFunction(fn: Function): Function {
+    return async (...args: any[]) => {
+      try {
+        const result = fn(...args);
+        // Handle promises
+        if (result && typeof result.then === 'function') {
+          return await result;
+        }
+        return result;
+      } catch (error) {
+        throw error;
+      }
+    };
+  }
+
+  // Wrap entire module exports
+  private wrapModuleExports(moduleExports: any): any {
+    if (typeof moduleExports === 'function') {
+      return this.wrapFunction(moduleExports);
+    }
+
+    if (typeof moduleExports === 'object' && moduleExports !== null) {
+      const wrapped: any = {};
+      for (const key in moduleExports) {
+        if (typeof moduleExports[key] === 'function') {
+          wrapped[key] = this.wrapFunction(moduleExports[key]);
+        } else {
+          wrapped[key] = moduleExports[key];
+        }
+      }
+      return wrapped;
+    }
+
+    return moduleExports;
   }
 
   private async handleUse(node: AST.UseStatementNode, env: Environment): Promise<RuntimeValue> {

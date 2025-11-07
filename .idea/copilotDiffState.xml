@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/test_exact_demo.fk">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/test_exact_demo.fk" />
+              <option name="originalContent" value="import {writeFileSync} from &quot;node:fs&quot;&#10;&#10;free output = JSON.stringify {&quot;demo&quot;: &quot;complete&quot;, &quot;timestamp&quot;: 1699315200}&#10;print output&#10;&#10;writeFileSync &quot;test_exact.txt&quot;, output&#10;print &quot;Done!&quot;&#10;&#10;" />
+              <option name="updatedContent" value="import {readFileSync, writeFileSync, existsSync} from &quot;node:fs&quot;&#10;import {resolve, basename, dirname} from &quot;node:path&quot;&#10;&#10;free output = JSON.stringify {&quot;demo&quot;: &quot;complete&quot;, &quot;timestamp&quot;: 1699315200}&#10;print output&#10;&#10;writeFileSync &quot;test_exact.txt&quot;, output&#10;print &quot;Done!&quot;&#10;&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/test_large_num.fk">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/test_large_num.fk" />
+              <option name="updatedContent" value="free output = JSON.stringify {&quot;timestamp&quot;: 1699315200}&#10;print output&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/test_minimal_demo.fk">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/test_minimal_demo.fk" />
+              <option name="updatedContent" value="declare files&#10;&#10;free config = {&quot;environment&quot;: &quot;production&quot;, &quot;port&quot;: 8080, &quot;debug&quot;: no}&#10;free configJson = JSON.stringify config&#10;print configJson&#10;&#10;free jsonData = {&quot;demo&quot;: &quot;complete&quot;}&#10;free jsonStr = JSON.stringify jsonData&#10;print jsonStr&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/test_num_in_obj.fk">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/test_num_in_obj.fk" />
+              <option name="updatedContent" value="free output = JSON.stringify {&quot;demo&quot;: &quot;complete&quot;, &quot;timestamp&quot;: 42}&#10;print output&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

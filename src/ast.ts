@@ -27,7 +27,8 @@ export type ASTNode =
   | RouteStatementNode
   | RespondStatementNode
   | PluginStatementNode
-  | UseStatementNode;
+  | UseStatementNode
+  | ImportStatementNode;
 
 export interface ProgramNode {
   type: 'Program';
@@ -206,5 +207,13 @@ export interface UseStatementNode {
   type: 'UseStatement';
   name: string;
   path?: string;
+}
+
+export interface ImportStatementNode {
+  type: 'ImportStatement';
+  names: string[]; // Named imports or ['*'] for default/namespace
+  from: string; // Module path (npm package or file path)
+  alias?: string; // For 'import * as alias'
+  isDefaultImport?: boolean; // True for default import, false for named
 }
 
