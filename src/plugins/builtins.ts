@@ -1,7 +1,7 @@
 // Built-in plugins for Flick
 
-import { Plugin, PluginContext } from './plugin.js';
-import * as AST from './ast.js';
+import { Plugin, PluginContext } from '../plugin.js';
+import * as AST from '../ast.js';
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 

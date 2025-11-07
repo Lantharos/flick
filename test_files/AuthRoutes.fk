@@ -11,4 +11,3 @@ end
 route "/status" =>
     respond "Auth service is running"
 end
-

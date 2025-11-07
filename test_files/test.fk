@@ -18,9 +18,9 @@ do Damageable for Player =>
     end
 end
 
-free Player player := Player "Vikki"
-player.greet
-player.takeDamage 15
+free Player player = Player "Vikki"
+player/greet
+player/takeDamage 15
 
 free isActive = yes
 lock names = ["Alice", "Bob", "Charlie"]

@@ -618,7 +618,9 @@ export class Parser {
     let expr = this.parsePrimaryExpression();
 
     while (true) {
-      if (this.match(TokenType.DOT)) {
+      // Check for member access: . or / followed by identifier
+      if (this.match(TokenType.DOT) ||
+          (this.match(TokenType.DIVIDE) && this.peek(1).type === TokenType.IDENTIFIER)) {
         this.advance();
         const property = this.expect(TokenType.IDENTIFIER).value;
         expr = {
@@ -667,10 +669,20 @@ export class Parser {
               break;
             }
 
-            // Check for structural/ending tokens
+            // Check for structural/ending tokens BEFORE consuming
             if (this.match(TokenType.ARROW, TokenType.ASSIGN, TokenType.EOF, TokenType.END,
                           TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE)) {
               break;
+            }
+
+            // BEFORE parsing as an argument, check if this looks like a new statement
+            // An identifier followed by / or . is likely starting a new member expression, not an argument
+            if (this.match(TokenType.IDENTIFIER)) {
+              const followingToken = this.peek(1);
+              if (followingToken.type === TokenType.DIVIDE || followingToken.type === TokenType.DOT) {
+                // This identifier starts a member expression, not an argument
+                break;
+              }
             }
 
             args.push(this.parsePrimaryExpression());
@@ -681,7 +693,18 @@ export class Parser {
               continue;
             }
 
-            // Stop if next token is not an argument-like token or is a keyword
+            // Before continuing, check if the current token (which would be the next arg)
+            // is followed by a stopping point (like = in variable declarations)
+            if (this.match(TokenType.IDENTIFIER)) {
+              const followingToken = this.peek(1);
+              if (followingToken.type === TokenType.ASSIGN ||
+                  followingToken.type === TokenType.ARROW ||
+                  followingToken.type === TokenType.COLON) {
+                break;
+              }
+            }
+
+            // Stop if next token is not an argument-like token
             if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET)) {
               break;
             }
