@@ -1,0 +1,16 @@
+lock n = ask
+free number = 0
+
+march i from 1 to n =>
+    lock m = ask "Enter a number: "
+
+    number := number + m
+
+    print number
+end
+
+task sigma with num(baddie) =>
+    print baddie
+end
+
+sigma 500

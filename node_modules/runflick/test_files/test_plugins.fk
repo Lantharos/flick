@@ -1,0 +1,21 @@
+declare time
+declare files
+
+print "Current timestamp:"
+print timestamp
+
+print "Reading test.flick file:"
+assume exists "test.flick" =>
+    free content = read "test.flick"
+    print "File exists! Length: "
+    print "Waiting 1 second..."
+    sleep 1000
+    print "Done waiting!"
+otherwise =>
+    print "File doesn't exist"
+end
+
+print "Writing a test file..."
+write "test_output.txt", "Hello from Flick!"
+print "File written successfully"
+
