@@ -75,7 +75,8 @@ print ""
 # 7. Write Output File
 print "💾 Writing output file..."
 free outputStr = "Demo completed successfully!"
-write "flick_demo_output.txt", outputStr
+lock test = JSON.stringify {"message": outputStr}
+write "flick_demo_output.txt", test
 print "✓ File written: flick_demo_output.txt"
 
 print ""

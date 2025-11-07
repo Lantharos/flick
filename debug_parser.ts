@@ -3,23 +3,8 @@ import { Lexer } from './src/lexer';
 import { Parser } from './src/parser';
 import { PluginManager } from './src/plugin';
 
-const code = `group Player {
-    free literal name
-
-    task greet =>
-        print "Hello"
-    end
-
-    task takeDamage with num(amount) =>
-        print "Took damage"
-    end
-}
-
-free Player p = Player "Vikki"
-p/greet
-p/takeDamage 25
-print "Test complete!"
-`;
+const code = `lock test = JSON.stringify {"message": outputStr}
+write "flick_demo_output.txt", test`;
 
 const lexer = new Lexer(code);
 const tokens = lexer.tokenize();

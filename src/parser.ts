@@ -695,11 +695,20 @@ export class Parser {
 
             // Before continuing, check if the current token (which would be the next arg)
             // is followed by a stopping point (like = in variable declarations)
+            // or if it looks like a function call (identifier followed by string/number/identifier/object/array)
             if (this.match(TokenType.IDENTIFIER)) {
               const followingToken = this.peek(1);
               if (followingToken.type === TokenType.ASSIGN ||
                   followingToken.type === TokenType.ARROW ||
                   followingToken.type === TokenType.COLON) {
+                break;
+              }
+              // If identifier is followed by argument-like tokens, it's likely a function call
+              // e.g., "write "file.txt", data" should not be parsed as args to previous call
+              if (followingToken.type === TokenType.STRING ||
+                  followingToken.type === TokenType.NUMBER ||
+                  followingToken.type === TokenType.LBRACE ||
+                  followingToken.type === TokenType.LBRACKET) {
                 break;
               }
             }
