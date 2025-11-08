@@ -2,7 +2,9 @@ lock n = ask
 free number = 0
 
 march i from 1 to n =>
-    print number + ask "Enter a number: "
+    number := number + ask "Enter a number: "
+
+    print number
 end
 
 task sigma with num(baddie) =>

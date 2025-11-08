@@ -1,6 +1,6 @@
 group Player {
     free num health = 100
-    free literal name = ""
+    free literal name
 
     task greet =>
         print "Hello, I am " and name
