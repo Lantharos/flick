@@ -2,7 +2,7 @@ declare time
 declare files
 
 print "Current timestamp:"
-print timestamp
+print now
 
 print "Reading test.flick file:"
 assume exists "test.flick" =>

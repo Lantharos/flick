@@ -1,2 +1,8 @@
 /dist
 node_modules
+
+# Test files
+test_*.fk
+debug_*.fk
+flick_demo_output.*
+.idea
