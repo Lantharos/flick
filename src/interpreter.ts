@@ -164,6 +164,17 @@ export class Interpreter {
           }
           return method;
         }
+
+        // Auto-call tasks when used as bare identifiers (e.g., "main" instead of "main()")
+        if (node.expression.type === 'Identifier') {
+          const value = await this.evaluateExpression(node.expression, env);
+          // If it's a function (task), call it with no arguments
+          if (typeof value === 'function') {
+            return await value();
+          }
+          return value;
+        }
+
         return await this.evaluateExpression(node.expression, env);
 
       default:

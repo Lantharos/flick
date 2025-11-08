@@ -40,6 +40,37 @@ task greet with literal(name) =>
 end
 
 greet "World"  # No parentheses!
+
+# Tasks can return values using 'give'
+task double with num(x) =>
+    give x * 2
+end
+
+free result = double 5
+print result  # 10
+
+# Tasks can be called without arguments
+task sayHello =>
+    print "Hello!"
+end
+
+sayHello  # Auto-calls even without ()
+```
+
+### Ternary Expressions (Inline Assume)
+```flick
+# Inline conditional expressions
+free age = 25
+free status = assume age >= 18 => "Adult", otherwise => "Minor"
+print status  # "Adult"
+
+# Nested ternaries
+free score = 85
+free grade = assume score >= 90 => "A", otherwise => assume score >= 80 => "B", otherwise => "C"
+print grade  # "B"
+
+# Without otherwise (returns null if false)
+free result = assume score > 100 => "Perfect"
 ```
 
 ### Conditionals
@@ -76,10 +107,31 @@ group Player {
         health := health - amount
         print name and " took damage!"
     end
+    
+    task getHealth =>
+        give health  # Return current health
+    end
 }
 
 free player = Player "Alice"
-player/takeDamage 15 # You can also use dot notation! <player.takeDamage 15>
+player/takeDamage 15  # You can also use dot notation! <player.takeDamage 15>
+
+free currentHealth = player/getHealth
+print currentHealth  # 85
+
+# Groups without required fields can be instantiated without arguments
+group Counter {
+    free num count = 0
+    
+    task increment =>
+        count := count + 1
+        give count
+    end
+}
+
+free Counter counter = Counter  # Auto-instantiates
+free value = counter/increment
+print value  # 1
 ```
 
 ### Blueprints (Interfaces)
@@ -196,17 +248,43 @@ Flick files use the `.fk` extension.
 
 **Control Flow:** `assume`, `maybe`, `otherwise`, `each`, `march`, `select`, `when`  
 **Declarations:** `group`, `blueprint`, `task`, `free`, `lock`, `declare`, `use`, `import`  
-**Statements:** `print`, `respond`, `route`, `do`, `for`, `with`, `in`, `from`, `to`  
+**Statements:** `print`, `respond`, `route`, `do`, `for`, `with`, `in`, `from`, `to`, `give`  
 **Booleans:** `yes`, `no`  
 **Types:** `num`, `literal`  
-**Operators:** `:= / =` (assignment), `and` (concatenation in print)
+**Operators:** `:=` (assignment), `=` (assignment/equality), `and` (concatenation in print), `/` or `.` (member access)
 
 ## Special Features
 
-### Auto-calling Functions in Print
+### Return Values
+Use `give` to return values from tasks:
 ```flick
-free x = random  # Automatically calls random() when printed
-print x          # Prints a random number
+task findFirst with num(threshold) =>
+    march i from 1 to 10 =>
+        assume i > threshold =>
+            give i  # Early return
+        end
+    end
+    give -1  # Not found
+end
+
+free result = findFirst 6
+print result  # 7
+```
+
+### Auto-calling Functions
+```flick
+task greet =>
+    print "Hello!"
+end
+
+greet  # Auto-calls
+
+# Groups auto-instantiate when assigned with type annotation
+group Counter {
+    free num count = 0
+}
+
+free Counter c = Counter  # Auto-instantiates
 ```
 
 ### Empty Checks
@@ -215,6 +293,17 @@ Empty strings, empty arrays, and empty objects are falsy:
 assume body =>  # True if body is not empty
     print "Has data"
 end
+```
+
+### Input Function
+The `ask` function prompts for user input and automatically uses an empty prompt if none is provided:
+```flick
+lock input = ask "Enter your name: "
+print "Hello, " and input
+
+# Can be used without prompt
+lock value = ask
+free result = ask + 1  # Asks with empty prompt, then adds 1
 ```
 
 ### Request Handling (Web Plugin)
@@ -230,7 +319,7 @@ Available in route handlers:
 declare web@3000
 declare files
 
-free database = JSON/parse (read "db.json")
+free database = JSON/parse (read "<path_from_workdir>/db.json")
 
 route GET "/api/users" =>
     respond json=database.users

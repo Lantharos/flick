@@ -814,7 +814,14 @@ export class Parser {
                     TokenType.EACH, TokenType.MARCH, TokenType.SELECT, TokenType.ROUTE,
                     TokenType.RESPOND, TokenType.TASK, TokenType.GROUP, TokenType.BLUEPRINT,
                     TokenType.DO, TokenType.DECLARE, TokenType.USE, TokenType.EOF,
-                    TokenType.END, TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE)) {
+                    TokenType.END, TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE,
+                    TokenType.PLUS, TokenType.MINUS, TokenType.MULTIPLY, TokenType.DIVIDE,
+                    TokenType.EQUALS, TokenType.NOT_EQUALS, TokenType.LESS_THAN, TokenType.GREATER_THAN,
+                    TokenType.LESS_EQUAL, TokenType.GREATER_EQUAL, TokenType.AND,
+                    TokenType.RPAREN, TokenType.RBRACKET, TokenType.COMMA, TokenType.ASSIGN)) {
+        prompt = { type: 'Literal', value: '', raw: '' };
+      } else if (this.match(TokenType.IDENTIFIER) && this.peek(1).type === TokenType.ASSIGN) {
+        // Identifier followed by = means it's a new variable declaration, not an argument
         prompt = { type: 'Literal', value: '', raw: '' };
       } else {
         prompt = this.parseExpression();
