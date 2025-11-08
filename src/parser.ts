@@ -355,12 +355,22 @@ export class Parser {
       return this.parseRespondStatement();
     }
 
+    if (this.match(TokenType.GIVE)) {
+      return this.parseReturnStatement();
+    }
+
     if (this.match(TokenType.PRINT)) {
       return this.parsePrintStatement();
     }
+
+    if (this.match(TokenType.FREE, TokenType.LOCK)) {
+      return this.parseVariableDeclaration();
+    }
+
     if (this.match(TokenType.ASSUME)) {
       return this.parseIfStatement();
     }
+
     if (this.match(TokenType.EACH)) {
       return this.parseEachLoop();
     }
@@ -369,9 +379,6 @@ export class Parser {
     }
     if (this.match(TokenType.SELECT)) {
       return this.parseSelectStatement();
-    }
-    if (this.match(TokenType.FREE, TokenType.LOCK)) {
-      return this.parseVariableDeclaration();
     }
 
     // Check for assignment or expression statement
@@ -546,8 +553,49 @@ export class Parser {
     return { type: 'SelectStatement', expression, cases };
   }
 
+  private parseReturnStatement(): AST.ReturnStatementNode {
+    this.expect(TokenType.GIVE);
+
+    // Check if there's a return value
+    if (this.match(TokenType.END, TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE, TokenType.EOF)) {
+      return { type: 'ReturnStatement', value: undefined };
+    }
+
+    const value = this.parseExpression();
+    return { type: 'ReturnStatement', value };
+  }
+
   private parseExpression(): AST.ASTNode {
+    return this.parseAssignmentExpression();
+  }
+
+  private parseAssignmentExpression(): AST.ASTNode {
+    // Check for inline assume (ternary expression)
+    if (this.match(TokenType.ASSUME)) {
+      return this.parseTernaryExpression();
+    }
+
     return this.parseLogicalExpression();
+  }
+
+  private parseTernaryExpression(): AST.TernaryExpressionNode {
+    this.expect(TokenType.ASSUME);
+    const condition = this.parseLogicalExpression();
+    this.expect(TokenType.ARROW);
+    const consequent = this.parseLogicalExpression();
+
+    let alternate: AST.ASTNode | undefined;
+    if (this.match(TokenType.COMMA)) {
+      this.advance();
+      if (this.match(TokenType.OTHERWISE)) {
+        this.advance();
+        this.expect(TokenType.ARROW);
+        // Allow nested ternaries by calling parseAssignmentExpression
+        alternate = this.parseAssignmentExpression();
+      }
+    }
+
+    return { type: 'TernaryExpression', condition, consequent, alternate };
   }
 
   private parseLogicalExpression(): AST.ASTNode {

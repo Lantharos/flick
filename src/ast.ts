@@ -28,7 +28,9 @@ export type ASTNode =
   | RespondStatementNode
   | PluginStatementNode
   | UseStatementNode
-  | ImportStatementNode;
+  | ImportStatementNode
+  | ReturnStatementNode
+  | TernaryExpressionNode;
 
 export interface ProgramNode {
   type: 'Program';
@@ -217,3 +219,14 @@ export interface ImportStatementNode {
   isDefaultImport?: boolean; // True for default import, false for named
 }
 
+export interface ReturnStatementNode {
+  type: 'ReturnStatement';
+  value?: ASTNode; // Optional return value
+}
+
+export interface TernaryExpressionNode {
+  type: 'TernaryExpression';
+  condition: ASTNode;
+  consequent: ASTNode;
+  alternate?: ASTNode;
+}

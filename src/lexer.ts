@@ -34,6 +34,7 @@ export enum TokenType {
   DECLARE = 'DECLARE',
   USE = 'USE',
   IMPORT = 'IMPORT',
+  GIVE = 'GIVE',
 
   // Plugin-specific keywords (dynamically registered)
   ROUTE = 'ROUTE',
@@ -123,6 +124,7 @@ const KEYWORDS: Record<string, TokenType> = {
   'declare': TokenType.DECLARE,
   'use': TokenType.USE,
   'import': TokenType.IMPORT,
+  'give': TokenType.GIVE,
   'route': TokenType.ROUTE,
   'respond': TokenType.RESPOND,
   'GET': TokenType.GET,

@@ -1,0 +1,80 @@
+# Test return (give) statements and ternary expressions
+
+# Test 1: Simple return
+task double with num(x) =>
+    give x * 2
+end
+
+free result1 = double 5
+print "Double of 5: " and result1
+
+# Test 2: Return with condition
+task getGrade with num(score) =>
+    assume score >= 90 =>
+        give "A"
+    maybe score >= 80 =>
+        give "B"
+    maybe score >= 70 =>
+        give "C"
+    otherwise =>
+        give "F"
+    end
+end
+
+free grade = getGrade 85
+print "Grade for 85: " and grade
+
+# Test 3: Inline ternary (assume)
+free age = 25
+free status = assume age >= 18 => "Adult", otherwise => "Minor"
+print "Age " and age and " is: " and status
+
+# Test 4: Nested ternary
+free score = 95
+free message = assume score >= 90 => "Excellent", otherwise => assume score >= 70 => "Good", otherwise => "Needs improvement"
+print "Score " and score and ": " and message
+
+# Test 5: Return in group method
+group Calculator {
+    task add with num(a), num(b) =>
+        give a + b
+    end
+
+    task multiply with num(a), num(b) =>
+        give a * b
+    end
+
+    task max with num(a), num(b) =>
+        give assume a > b => a, otherwise => b
+    end
+}
+
+free Calculator calc = Calculator
+free sum = calc/add 10, 20
+free product = calc/multiply 5, 7
+free maximum = calc/max 15, 23
+
+print "Sum: " and sum
+print "Product: " and product
+print "Max: " and maximum
+
+# Test 6: Ternary without otherwise (returns null)
+free value = 10
+free result = assume value > 5 => "Big"
+print "Result: " and result
+
+# Test 7: Early return
+task findFirst with num(threshold) =>
+    march i from 1 to 10 =>
+        assume i > threshold =>
+            give i
+        end
+    end
+    give -1  # Not found
+end
+
+free found = findFirst 6
+print "First number > 6: " and found
+
+print "All tests completed!"
+

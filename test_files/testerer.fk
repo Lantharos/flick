@@ -1,3 +1,12 @@
-task help with literal(meow) =>
-   print meow
+task main =>
+    free num hang = ask ""
+    hang := hang + 1
+    print hang
 end
+
+main
+
+#lock b = ask
+#free a = assume b > 10 => "omg", otherwise => "nope"
+
+#print a

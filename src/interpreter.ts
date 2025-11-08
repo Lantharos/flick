@@ -145,6 +145,11 @@ export class Interpreter {
       case 'SelectStatement':
         return await this.executeSelect(node, env);
 
+      case 'ReturnStatement':
+        const returnValue = node.value ? await this.evaluateExpression(node.value, env) : undefined;
+        // Throw a special return object that will be caught by task execution
+        throw { __return: true, value: returnValue };
+
       case 'ExpressionStatement':
         // If the expression is a MemberExpression (like player.greet), treat it as a call
         if (node.expression.type === 'MemberExpression') {
@@ -202,6 +207,9 @@ export class Interpreter {
 
       case 'AskExpression':
         return await this.evaluateAsk(node, env);
+
+      case 'TernaryExpression':
+        return await this.evaluateTernaryExpression(node, env);
 
       default:
         throw new Error(`Unknown statement type: ${(node as any).type}`);
@@ -532,8 +540,16 @@ export class Interpreter {
     }
 
     // Execute body
-    for (const statement of node.body) {
-      await this.evaluateStatement(statement, taskEnv);
+    try {
+      for (const statement of node.body) {
+        await this.evaluateStatement(statement, taskEnv);
+      }
+    } catch (error: any) {
+      // Check if this is a return statement
+      if (error && error.__return) {
+        return error.value;
+      }
+      throw error;
     }
 
     return null;
@@ -554,8 +570,16 @@ export class Interpreter {
     }
 
     // Execute body
-    for (const statement of node.body) {
-      await this.evaluateStatement(statement, taskEnv);
+    try {
+      for (const statement of node.body) {
+        await this.evaluateStatement(statement, taskEnv);
+      }
+    } catch (error: any) {
+      // Check if this is a return statement
+      if (error && error.__return) {
+        return error.value;
+      }
+      throw error;
     }
 
     return null;
@@ -566,6 +590,17 @@ export class Interpreter {
 
     if (node.initializer) {
       value = await this.evaluateExpression(node.initializer, env);
+
+      // Auto-call group constructors with no args when assigning bare constructor
+      // e.g., "free Player p = Player" should be equivalent to "free Player p = Player()"
+      if (node.varType &&
+          this.groups.has(node.varType) &&
+          node.initializer.type === 'Identifier' &&
+          (node.initializer as AST.IdentifierNode).name === node.varType &&
+          typeof value === 'function') {
+        // Call the constructor with no arguments
+        value = value();
+      }
     }
 
     env.vars.set(node.name, { value, mutable: node.mutable });
@@ -790,6 +825,18 @@ export class Interpreter {
         resolve(answer);
       });
     });
+  }
+
+  private async evaluateTernaryExpression(node: AST.TernaryExpressionNode, env: Environment): Promise<RuntimeValue> {
+    const condition = await this.evaluateExpression(node.condition, env);
+
+    if (this.isTruthy(condition)) {
+      return await this.evaluateExpression(node.consequent, env);
+    } else if (node.alternate) {
+      return await this.evaluateExpression(node.alternate, env);
+    }
+
+    return null;
   }
 
   private lookupVariable(name: string, env: Environment): RuntimeValue {

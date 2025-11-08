@@ -9,7 +9,20 @@ A modern, expressive programming language with a focus on readability and develo
 🌐 **Web Server (Gazelle)** - Built-in HTTP server with routing and nested modules  
 📦 **JavaScript/TypeScript Imports** - Use npm packages and Node.js modules seamlessly  
 🎯 **Type Inference** - Smart type handling with automatic conversions  
-🔄 **Modern Control Flow** - Intuitive syntax for loops and conditionals  
+🔄 **Modern Control Flow** - Intuitive syntax for loops and conditionals
+
+## Installation
+
+```bash
+npm install -g runflick
+```
+
+## Usage
+
+```bash
+# Run a Flick file
+flick run yourfile.fk
+```
 
 ## Syntax Examples
 
@@ -66,7 +79,7 @@ group Player {
 }
 
 free player = Player "Alice"
-player.takeDamage 15
+player/takeDamage 15 # You can also use dot notation! <player.takeDamage 15>
 ```
 
 ### Blueprints (Interfaces)
@@ -88,8 +101,8 @@ import {readFileSync, writeFileSync} from "node:fs"
 import {resolve} from "node:path"
 
 free content = readFileSync "package.json", "utf-8"
-free data = JSON.parse content
-print data.name
+free data = JSON/parse content
+print data/name
 
 writeFileSync "output.txt", "Hello from Flick!"
 ```
@@ -109,7 +122,7 @@ end
 
 # Access request data
 route GET "/search" =>
-    print query.term
+    print query/term
     print headers["user-agent"]
     respond json=query
 end
@@ -175,37 +188,18 @@ free shuffled = shuffle myArray
 free pick = choice myArray
 ```
 
-## Running Flick
-
-```bash
-# Run a Flick file
-npm run run yourfile.fk
-
-# Or with tsx directly
-tsx src/runner.ts yourfile.fk
-```
-
 ## File Extension
 
 Flick files use the `.fk` extension.
-
-## Type System
-
-Flick is dynamically typed with smart conversions:
-
-- `num(value)` - Convert to number
-- `str(value)` - Convert to string
-- `+` operator - Smart addition (numeric if both operands are numbers, otherwise concatenation)
-- `ask` - Returns string input from user
 
 ## Keywords
 
 **Control Flow:** `assume`, `maybe`, `otherwise`, `each`, `march`, `select`, `when`  
 **Declarations:** `group`, `blueprint`, `task`, `free`, `lock`, `declare`, `use`, `import`  
 **Statements:** `print`, `respond`, `route`, `do`, `for`, `with`, `in`, `from`, `to`  
-**Literals:** `yes`, `no`  
+**Booleans:** `yes`, `no`  
 **Types:** `num`, `literal`  
-**Operators:** `:=` (assignment), `and` (concatenation in print)
+**Operators:** `:= / =` (assignment), `and` (concatenation in print)
 
 ## Special Features
 
@@ -234,9 +228,9 @@ Available in route handlers:
 
 ```flick
 declare web@3000
-import {readFileSync} from "node:fs"
+declare files
 
-free database = JSON.parse (readFileSync "db.json", "utf-8")
+free database = JSON/parse (read "db.json")
 
 route GET "/api/users" =>
     respond json=database.users
@@ -244,22 +238,17 @@ end
 
 route POST "/api/users" =>
     free user = body
-    free userId = database.users.length + 1
+    free userId = database/users/length + 1
     # Add user to database...
     respond json={"id": userId, "name": user.name}, status=201
 end
 
 route GET "/api/users/:id" =>
-    free userId = query.id
-    respond json={"message": "User " and userId}
+    free userId = query/id
+    respond json={"message": "User " + userId}
 end
 ```
 
 ## License
 
 ISC
-
-## Author
-
-Built with ❤️ for expressive programming
-
