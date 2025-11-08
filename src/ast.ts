@@ -77,6 +77,8 @@ export interface DoImplementationNode {
 export interface VariableDeclarationNode {
   type: 'VariableDeclaration';
   name: string;
+  names?: string[]; // For multi-variable declarations like: free data, error = ...
+  aliases?: { [key: string]: string }; // For aliased destructuring: free data as profileData, error as profileError = ...
   mutable: boolean; // true for 'free', false for 'lock'
   varType?: string; // 'num', 'literal', type name, etc.
   initializer?: ASTNode;

@@ -5,6 +5,8 @@ import * as readline from 'node:readline';
 import { PluginManager, PluginContext } from './plugin.js';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 // Runtime values
 type RuntimeValue = any;
@@ -230,15 +232,29 @@ export class Interpreter {
   private async handleImport(node: AST.ImportStatementNode, env: Environment): Promise<RuntimeValue> {
     try {
       let modulePath = node.from;
+      let importedModule: any;
 
       // If it's a relative path, resolve it relative to current file
       if (modulePath.startsWith('.')) {
         const baseDir = dirname(this.currentFilePath);
         modulePath = resolve(baseDir, modulePath);
-      }
+        importedModule = await import(pathToFileURL(modulePath).href);
+      } else {
+        // For non-relative paths (packages), use require.resolve to find them in node_modules
+        // relative to the current file's directory
+        const baseDir = this.currentFilePath ? dirname(resolve(this.currentFilePath)) : process.cwd();
+        const requireFromProject = createRequire(join(baseDir, '__placeholder__.js'));
 
-      // Dynamically import the module
-      const importedModule = await import(modulePath);
+        try {
+          // Resolve the module path relative to the project
+          const resolvedPath = requireFromProject.resolve(modulePath);
+          // Import the resolved module
+          importedModule = await import(pathToFileURL(resolvedPath).href);
+        } catch (resolveError) {
+          // If that fails, try direct import (for built-in Node modules)
+          importedModule = await import(modulePath);
+        }
+      }
 
       // Handle different import patterns
       if (node.names.includes('*')) {
@@ -260,10 +276,8 @@ export class Interpreter {
         // Named imports: import {readFile, writeFile} from "fs"
         for (const name of node.names) {
           if (importedModule[name] !== undefined) {
-            const wrapped = typeof importedModule[name] === 'function'
-              ? this.wrapFunction(importedModule[name])
-              : importedModule[name];
-            env.vars.set(name, { value: wrapped, mutable: false });
+            // Don't wrap - return as-is so native objects work properly
+            env.vars.set(name, { value: importedModule[name], mutable: false });
           }
         }
       }
@@ -275,6 +289,7 @@ export class Interpreter {
   }
 
   // Wrap JS/TS functions to work with Flick's calling convention
+  // Note: We don't deeply wrap - just handle async in evaluateCall
   private wrapFunction(fn: Function): Function {
     return async (...args: any[]) => {
       try {
@@ -293,19 +308,13 @@ export class Interpreter {
   // Wrap entire module exports
   private wrapModuleExports(moduleExports: any): any {
     if (typeof moduleExports === 'function') {
-      return this.wrapFunction(moduleExports);
+      // Don't wrap - return as-is so native objects work
+      return moduleExports;
     }
 
     if (typeof moduleExports === 'object' && moduleExports !== null) {
-      const wrapped: any = {};
-      for (const key in moduleExports) {
-        if (typeof moduleExports[key] === 'function') {
-          wrapped[key] = this.wrapFunction(moduleExports[key]);
-        } else {
-          wrapped[key] = moduleExports[key];
-        }
-      }
-      return wrapped;
+      // Return as-is so method chaining works with libraries like Supabase
+      return moduleExports;
     }
 
     return moduleExports;
@@ -612,9 +621,44 @@ export class Interpreter {
         // Call the constructor with no arguments
         value = value();
       }
+
+      // If we're doing a multi-variable declaration (destructuring), await thenables
+      // This allows query builders to be executed: free data, error = supabase/from.../select...
+      if (node.names && node.names.length > 1 && value && typeof value.then === 'function') {
+        value = await value;
+      }
     }
 
-    env.vars.set(node.name, { value, mutable: node.mutable });
+    // Handle multi-variable declarations (e.g., free data, error = functionCall())
+    if (node.names && node.names.length > 1) {
+      // If the value is an array, destructure it
+      if (Array.isArray(value)) {
+        for (let i = 0; i < node.names.length; i++) {
+          const sourceVarName = node.names[i];
+          const targetVarName = node.aliases && node.aliases[sourceVarName] ? node.aliases[sourceVarName] : sourceVarName;
+          const varValue = i < value.length ? value[i] : null;
+          env.vars.set(targetVarName, { value: varValue, mutable: node.mutable });
+        }
+      } else if (value && typeof value === 'object') {
+        // If it's an object, try to extract properties by the same names
+        for (const sourceVarName of node.names) {
+          const targetVarName = node.aliases && node.aliases[sourceVarName] ? node.aliases[sourceVarName] : sourceVarName;
+          const varValue = value[sourceVarName] !== undefined ? value[sourceVarName] : null;
+          env.vars.set(targetVarName, { value: varValue, mutable: node.mutable });
+        }
+      } else {
+        // Otherwise, assign the value to the first variable and null to the rest
+        for (let i = 0; i < node.names.length; i++) {
+          const sourceVarName = node.names[i];
+          const targetVarName = node.aliases && node.aliases[sourceVarName] ? node.aliases[sourceVarName] : sourceVarName;
+          const varValue = i === 0 ? value : null;
+          env.vars.set(targetVarName, { value: varValue, mutable: node.mutable });
+        }
+      }
+    } else {
+      // Single variable declaration
+      env.vars.set(node.name, { value, mutable: node.mutable });
+    }
 
     return null;
   }
@@ -807,19 +851,59 @@ export class Interpreter {
     }
 
     if (typeof callee === 'function') {
-      return await callee(...args);
+      const result = callee(...args);
+
+      // Check if result is a promise or thenable
+      if (result && typeof result.then === 'function') {
+        // Check if it's a query builder (has methods like eq, select, etc.)
+        // Query builders are thenable but shouldn't be awaited until the chain is complete
+        const isQueryBuilder = result && (
+          typeof result.eq === 'function' ||
+          typeof result.select === 'function' ||
+          typeof result.insert === 'function' ||
+          typeof result.update === 'function' ||
+          typeof result.delete === 'function' ||
+          typeof result.from === 'function'
+        );
+
+        if (!isQueryBuilder) {
+          // Regular promise - await it
+          return await result;
+        }
+      }
+
+      return result;
     }
 
-    throw new Error(`Not a function`);
+    // Better error message
+    const calleeInfo = node.callee.type === 'MemberExpression'
+      ? `${(node.callee as any).property?.name || 'unknown'}`
+      : node.callee.type === 'Identifier'
+      ? `${(node.callee as any).name}`
+      : node.callee.type;
+
+    throw new Error(`Not a function: tried to call ${calleeInfo} but got ${typeof callee} (${callee})`);
   }
 
   private async evaluateMemberExpression(node: AST.MemberExpressionNode, env: Environment): Promise<RuntimeValue> {
     const obj = await this.evaluateExpression(node.object, env);
+
+    if (obj === null || obj === undefined) {
+      throw new Error(`Cannot access property of null or undefined`);
+    }
+
     const prop = node.computed
       ? await this.evaluateExpression(node.property, env)
       : (node.property as AST.IdentifierNode).name;
 
-    return obj[prop];
+    const value = obj[prop];
+
+    // If the value is a function, bind it to the object to preserve 'this' context
+    if (typeof value === 'function') {
+      return value.bind(obj);
+    }
+
+    return value;
   }
 
   private async evaluateAsk(node: AST.AskExpressionNode, env: Environment): Promise<RuntimeValue> {
@@ -919,11 +1003,35 @@ export class Interpreter {
     if (value === null || value === undefined) {
       return 'null';
     }
+    if (typeof value === 'function') {
+      return '[Function]';
+    }
     if (Array.isArray(value)) {
-      return JSON.stringify(value);
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '[Array]';
+      }
     }
     if (typeof value === 'object') {
-      return JSON.stringify(value);
+      // Handle circular references with a replacer function
+      const seen = new WeakSet();
+      try {
+        return JSON.stringify(value, (key, val) => {
+          if (typeof val === 'object' && val !== null) {
+            if (seen.has(val)) {
+              return '[Circular]';
+            }
+            seen.add(val);
+          }
+          if (typeof val === 'function') {
+            return '[Function]';
+          }
+          return val;
+        }, 2);
+      } catch {
+        return '[Object]';
+      }
     }
     return String(value);
   }

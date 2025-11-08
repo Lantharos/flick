@@ -36,6 +36,21 @@ export class Parser {
     return types.includes(this.peek().type);
   }
 
+  private isKeyword(token: Token): boolean {
+    // List of all keyword token types
+    const keywords = [
+      TokenType.GROUP, TokenType.BLUEPRINT, TokenType.TASK, TokenType.FREE, TokenType.LOCK,
+      TokenType.ASSUME, TokenType.MAYBE, TokenType.OTHERWISE, TokenType.EACH, TokenType.MARCH,
+      TokenType.SUPPOSE, TokenType.DO, TokenType.FOR, TokenType.WITH, TokenType.IN,
+      TokenType.FROM, TokenType.TO, TokenType.WHEN, TokenType.SELECT, TokenType.END,
+      TokenType.PRINT, TokenType.ASK, TokenType.AND, TokenType.YES, TokenType.NO,
+      TokenType.NUM, TokenType.LITERAL, TokenType.DECLARE, TokenType.USE, TokenType.IMPORT,
+      TokenType.GIVE, TokenType.AS, TokenType.ROUTE, TokenType.RESPOND,
+      TokenType.GET, TokenType.POST, TokenType.PUT, TokenType.DELETE, TokenType.PATCH
+    ];
+    return keywords.includes(token.type);
+  }
+
   public parse(): AST.ProgramNode {
     const body: AST.ASTNode[] = [];
 
@@ -317,6 +332,8 @@ export class Parser {
 
     let varType: string | undefined;
     let name: string;
+    let names: string[] | undefined;
+    let aliases: { [key: string]: string } | undefined;
 
     // Check if there's a type annotation (could be num, literal, or identifier)
     const firstToken = this.peek();
@@ -332,6 +349,41 @@ export class Parser {
       name = this.expect(TokenType.IDENTIFIER).value;
     }
 
+    // Check if first variable has an alias (before checking for comma)
+    if (this.match(TokenType.AS)) {
+      this.advance(); // consume 'as'
+      const alias = this.expect(TokenType.IDENTIFIER).value;
+      names = [name];
+      aliases = { [name]: alias };
+    }
+
+    // Check for comma-separated variable names (multi-variable declaration)
+    if (this.match(TokenType.COMMA)) {
+      if (!names) {
+        names = [name];
+        aliases = {};
+      }
+
+      while (this.match(TokenType.COMMA)) {
+        this.advance(); // consume comma
+        const varName = this.expect(TokenType.IDENTIFIER).value;
+        names.push(varName);
+
+        // Check for alias
+        if (this.match(TokenType.AS)) {
+          this.advance(); // consume 'as'
+          const alias = this.expect(TokenType.IDENTIFIER).value;
+          if (!aliases) aliases = {};
+          aliases[varName] = alias;
+        }
+      }
+
+      // If no aliases were used, clear the aliases object
+      if (aliases && Object.keys(aliases).length === 0) {
+        aliases = undefined;
+      }
+    }
+
     let initializer: AST.ASTNode | undefined;
     if (this.match(TokenType.ASSIGN)) {
       this.advance();
@@ -344,7 +396,7 @@ export class Parser {
       }
     }
 
-    return { type: 'VariableDeclaration', name, mutable, varType, initializer };
+    return { type: 'VariableDeclaration', name, names, aliases, mutable, varType, initializer };
   }
 
   private parseStatement(): AST.ASTNode {
@@ -666,11 +718,19 @@ export class Parser {
     let expr = this.parsePrimaryExpression();
 
     while (true) {
-      // Check for member access: . or / followed by identifier
+      // Check for member access: . or / followed by identifier or keyword
       if (this.match(TokenType.DOT) ||
-          (this.match(TokenType.DIVIDE) && this.peek(1).type === TokenType.IDENTIFIER)) {
+          (this.match(TokenType.DIVIDE) && (this.peek(1).type === TokenType.IDENTIFIER || this.isKeyword(this.peek(1))))) {
         this.advance();
-        const property = this.expect(TokenType.IDENTIFIER).value;
+        // Allow both identifiers and keywords as property names
+        let property: string;
+        if (this.match(TokenType.IDENTIFIER)) {
+          property = this.advance().value;
+        } else if (this.isKeyword(this.peek())) {
+          property = this.advance().value;
+        } else {
+          throw new Error(`Expected property name after member access operator at line ${this.peek().line}`);
+        }
         expr = {
           type: 'MemberExpression',
           object: expr,
@@ -852,7 +912,16 @@ export class Parser {
       const properties: Array<{ key: string; value: AST.ASTNode }> = [];
 
       while (!this.match(TokenType.RBRACE)) {
-        const key = this.expect(TokenType.STRING).value;
+        // Allow both string literals and identifiers as keys
+        let key: string;
+        if (this.match(TokenType.STRING)) {
+          key = this.advance().value;
+        } else if (this.match(TokenType.IDENTIFIER)) {
+          key = this.advance().value;
+        } else {
+          throw new Error(`Expected STRING or IDENTIFIER for object key but got ${this.peek().type} at line ${this.peek().line}, column ${this.peek().column}`);
+        }
+
         this.expect(TokenType.COLON);
         const value = this.parseExpression();
         properties.push({ key, value });

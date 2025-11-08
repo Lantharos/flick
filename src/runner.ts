@@ -1,6 +1,7 @@
 // Runner for Flick interpreter
 
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Lexer } from './lexer.js';
 import { Parser } from './parser.js';
 import { Interpreter } from './interpreter.js';
@@ -9,8 +10,11 @@ import { WebPlugin, FilesPlugin, TimePlugin, RandomPlugin } from './plugins/buil
 
 export async function runFlick(filePath: string): Promise<void> {
   try {
+    // Resolve to absolute path to ensure imports work correctly
+    const absolutePath = resolve(filePath);
+
     // Read the source code
-    const sourceCode = readFileSync(filePath, 'utf-8');
+    const sourceCode = readFileSync(absolutePath, 'utf-8');
 
     // Initialize plugin manager
     const pluginManager = new PluginManager();
@@ -29,8 +33,8 @@ export async function runFlick(filePath: string): Promise<void> {
     const parser = new Parser(tokens, pluginManager);
     const ast = parser.parse();
 
-    // Interpret
-    const interpreter = new Interpreter(pluginManager, filePath);
+    // Interpret with absolute path
+    const interpreter = new Interpreter(pluginManager, absolutePath);
     await interpreter.interpret(ast);
 
   } catch (error) {
