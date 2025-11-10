@@ -720,6 +720,12 @@ export class Parser {
     return this.parsePostfixExpression();
   }
 
+  // Parse an argument expression - like parseAdditiveExpression but for function arguments
+  // This allows binary operators like + in space-separated function arguments
+  private parseArgumentExpression(): AST.ASTNode {
+    return this.parseAdditiveExpression();
+  }
+
   private parsePostfixExpression(): AST.ASTNode {
     let expr = this.parsePrimaryExpression();
 
@@ -822,7 +828,9 @@ export class Parser {
             }
           }
 
-          args.push(this.parsePrimaryExpression());
+          // Parse argument as a full expression (including binary operators like +)
+          // but stop at commas and structural tokens
+          args.push(this.parseArgumentExpression());
 
           // After parsing an arg, check if we should continue
           if (this.match(TokenType.COMMA)) {

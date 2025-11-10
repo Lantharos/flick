@@ -17,8 +17,11 @@ Window.button "Click Me!", =>
     Window.alert "You clicked the button! 🎉"
 end
 
-Window.button "What's your name?", =>
-    free name = Window.prompt "Enter your name:", "Friend"
+free nameInput = Window.input {label: "What's your name?", placeholder: "Friend"}
+
+Window.button "Submit Name", =>
+    free name = Window.getInputValue nameInput
+    Window.clear
     Window.heading "Hello, " + name + "!"
     Window.print "Welcome to Flick Windows!"
 end

@@ -499,12 +499,6 @@ class WindowManager {
             alert(message);
         });
 
-        // Listen for input requests
-        ipcRenderer.on('prompt', (event, data) => {
-            const value = prompt(data.label, data.defaultValue || '');
-            ipcRenderer.send('prompt-response', value);
-        });
-
         // Get input value
         ipcRenderer.on('get-input-value', (event, inputId) => {
             const input = document.getElementById(inputId);
@@ -577,20 +571,6 @@ function createWindow() {
         }
     }, 100);
     
-    // Poll for prompt requests
-    setInterval(() => {
-        const promptFile = path.join(callbackDir, 'prompt-request.json');
-        if (fs.existsSync(promptFile)) {
-            try {
-                const data = JSON.parse(fs.readFileSync(promptFile, 'utf-8'));
-                fs.unlinkSync(promptFile);
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('prompt', data);
-                }
-            } catch (error) {}
-        }
-    }, 100);
-    
     // Poll for input value requests
     setInterval(() => {
         const inputFile = path.join(callbackDir, 'input-request.json');
@@ -631,12 +611,6 @@ app.on('activate', () => {
 ipcMain.on('button-click', (event, id) => {
     const callbackFile = path.join(callbackDir, 'callback-' + id + '.txt');
     fs.writeFileSync(callbackFile, Date.now().toString());
-});
-
-// Handle prompts
-ipcMain.on('prompt-response', (event, value) => {
-    const promptFile = path.join(callbackDir, 'prompt-response.txt');
-    fs.writeFileSync(promptFile, value || '');
 });
 
 // Handle input value requests
@@ -684,9 +658,6 @@ ipcMain.on('input-value-response', (event, value) => {
         if (callback) {
           callback();
         }
-      } else if (msg.type === 'prompt-response') {
-        // Store for retrieval
-        (this as any).lastPromptValue = msg.value;
       } else if (msg.type === 'input-value-response') {
         (this as any).lastInputValue = msg.value;
       } else if (msg.type === 'window-closed') {
@@ -958,38 +929,6 @@ ipcMain.on('input-value-response', (event, value) => {
     while (Date.now() - start < 100) {} // Busy wait briefly
   }
 
-  async prompt(label: string, defaultValue: string = ''): Promise<string> {
-    const promptFilePath = join(this.tempDir, 'prompt-request.json');
-    const responseFilePath = join(this.tempDir, 'prompt-response.txt');
-    
-    // Clean up any old response
-    if (existsSync(responseFilePath)) {
-      unlinkSync(responseFilePath);
-    }
-    
-    // Write prompt request
-    writeFileSync(promptFilePath, JSON.stringify({ label, defaultValue }));
-    
-    // Wait for response
-    return new Promise((resolve) => {
-      const checkValue = () => {
-        if (existsSync(responseFilePath)) {
-          try {
-            const value = readFileSync(responseFilePath, 'utf-8');
-            unlinkSync(responseFilePath);
-            resolve(value || '');
-          } catch (error) {
-            setTimeout(checkValue, 50);
-          }
-        } else {
-          setTimeout(checkValue, 50);
-        }
-      };
-      
-      setTimeout(checkValue, 100);
-    });
-  }
-
   clear(): void {
     this.elements = [];
     this.render();
@@ -1109,8 +1048,8 @@ export const WindowPlugin: Plugin = {
         windowManager.print(content, options || {});
       },
 
-      heading: (content: string) => {
-        windowManager.heading(content);
+      heading: (content: string, options?: any) => {
+        windowManager.heading(content, options || {});
       },
 
       button: (label: string, onClick?: Function) => {
@@ -1140,8 +1079,8 @@ export const WindowPlugin: Plugin = {
         windowManager.grid(columns, items);
       },
 
-      card: (content: string) => {
-        windowManager.card(content);
+      card: (content: string, options?: any) => {
+        windowManager.card(content, options || {});
       },
 
       divider: () => {
@@ -1150,10 +1089,6 @@ export const WindowPlugin: Plugin = {
 
       alert: (message: string) => {
         windowManager.alert(message);
-      },
-
-      prompt: async (label: string, defaultValue?: string) => {
-        return await windowManager.prompt(label, defaultValue || '');
       },
 
       clear: () => {

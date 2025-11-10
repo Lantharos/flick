@@ -1,8 +1,9 @@
 /dist
 node_modules
+.idea
+.vscode
+.DS_Store
 
 # Test files
-test_*.fk
 debug_*.fk
 flick_demo_output.*
-.idea

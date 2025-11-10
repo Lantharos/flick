@@ -31,7 +31,7 @@ task renderTodos =>
     Window.heading "Your Tasks"
     
     assume todos == [] =>
-        Window.print "No todos yet! Add one above to get started.", style={color: "#878787", fontStyle: "italic"}
+        Window.print "No todos yet! Add one above to get started.", {style: {color: "#3d3d3dff", fontStyle: "italic"}}
     otherwise =>
         free index = 0
         each todo in todos =>
@@ -40,7 +40,7 @@ task renderTodos =>
             free currentIndex = index
             
             assume isDone =>
-                Window.card "<strike style='color: #878787'>" + taskText + "</strike> ✓"
+                Window.card taskText, { style: {textDecoration: "line-through", color: "#b6b6b6ff"} }
             otherwise =>
                 Window.card taskText
             end
@@ -90,7 +90,7 @@ task renderTodos =>
     end
 
     Window.print "Total tasks: " + str(todoCount)
-    Window.print "Pro tip: This demonstrates state management in Flick!", style={fontSize: "12px", color: "#666"}
+    Window.print "Pro tip: This demonstrates state management in Flick!", {style: {fontSize: "12px", color: "#666"}}
 end
 
 task main =>

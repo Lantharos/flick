@@ -12,7 +12,7 @@ task main =>
 
     # Print some styled text
     Window.print "This is a modern, beautiful GUI built with just a few lines of Flick code."
-    Window.print "No ugly Tkinter, no complex setup - just clean, simple syntax.", style={color: "#666", fontSize: "14px"}
+    Window.print "No ugly Tkinter, no complex setup - just clean, simple syntax.", {style: {color: "#666", fontSize: "14px"}}
 
     Window.divider
 
@@ -32,8 +32,10 @@ task main =>
         Window.alert "Hello from Flick! 👋"
     end
 
-    Window.button "Show a Popup", =>
-        free name = Window.prompt "What's your name?", "Friend"
+    free firstNameInput = Window.input {label: "What's your name?", placeholder: "Friend"}
+    
+    Window.button "Greet Me", =>
+        free name = Window.getInputValue firstNameInput
         Window.alert "Nice to meet you, " + name + "!"
     end
 

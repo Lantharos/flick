@@ -630,6 +630,12 @@ export class Interpreter {
       if (node.names && node.names.length > 1 && value && typeof value.then === 'function') {
         value = await value;
       }
+      
+      // Also await promises in single variable declarations
+      // This ensures async functions like Window.getInputValue are properly awaited
+      if (!node.names && value && typeof value.then === 'function') {
+        value = await value;
+      }
     }
 
     // Handle multi-variable declarations (e.g., free data, error = functionCall())
