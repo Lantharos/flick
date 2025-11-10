@@ -30,7 +30,8 @@ export type ASTNode =
   | UseStatementNode
   | ImportStatementNode
   | ReturnStatementNode
-  | TernaryExpressionNode;
+  | TernaryExpressionNode
+  | LambdaExpressionNode;
 
 export interface ProgramNode {
   type: 'Program';
@@ -231,4 +232,10 @@ export interface TernaryExpressionNode {
   condition: ASTNode;
   consequent: ASTNode;
   alternate?: ASTNode;
+}
+
+export interface LambdaExpressionNode {
+  type: 'LambdaExpression';
+  parameters: ParameterNode[];
+  body: ASTNode[];
 }

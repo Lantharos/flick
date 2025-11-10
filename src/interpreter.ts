@@ -224,6 +224,9 @@ export class Interpreter {
       case 'TernaryExpression':
         return await this.evaluateTernaryExpression(node, env);
 
+      case 'LambdaExpression':
+        return await this.evaluateLambdaExpression(node, env);
+
       default:
         throw new Error(`Unknown statement type: ${(node as any).type}`);
     }
@@ -798,6 +801,11 @@ export class Interpreter {
 
     switch (node.operator) {
       case '+':
+        // If both operands are arrays, concatenate them
+        if (Array.isArray(left) && Array.isArray(right)) {
+          return [...left, ...right];
+        }
+        
         // If both operands are numeric strings or numbers, do numeric addition
         const leftNum = typeof left === 'string' ? parseFloat(left) : left;
         const rightNum = typeof right === 'string' ? parseFloat(right) : right;
@@ -932,6 +940,35 @@ export class Interpreter {
     }
 
     return null;
+  }
+
+  private async evaluateLambdaExpression(node: AST.LambdaExpressionNode, env: Environment): Promise<RuntimeValue> {
+    // Return a function that captures the current environment
+    return async (...args: any[]) => {
+      const lambdaEnv: Environment = { vars: new Map(), parent: env };
+      
+      // Bind parameters if any
+      for (let i = 0; i < node.parameters.length; i++) {
+        const param = node.parameters[i];
+        const value = i < args.length ? args[i] : null;
+        lambdaEnv.vars.set(param.name, { value, mutable: true });
+      }
+      
+      // Execute body
+      try {
+        for (const statement of node.body) {
+          await this.evaluateStatement(statement, lambdaEnv);
+        }
+      } catch (error: any) {
+        // Check if this is a return statement
+        if (error && error.__return) {
+          return error.value;
+        }
+        throw error;
+      }
+      
+      return null;
+    };
   }
 
   private lookupVariable(name: string, env: Environment): RuntimeValue {

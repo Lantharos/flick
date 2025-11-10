@@ -1,0 +1,96 @@
+# Flick Window Plugin Demo
+# Modern, clean GUI made simple
+
+declare window
+
+task main =>
+    # Open a beautiful window
+    Window.open "Flick GUI Demo", {width: 900, height: 700}
+
+    # Add a heading
+    Window.heading "Welcome to Flick Windows! 🚀"
+
+    # Print some styled text
+    Window.print "This is a modern, beautiful GUI built with just a few lines of Flick code."
+    Window.print "No ugly Tkinter, no complex setup - just clean, simple syntax.", style={color: "#666", fontSize: "14px"}
+
+    Window.divider
+
+    # Add some cards
+    Window.card "<h3>🎨 Beautiful Design</h3><p>Modern gradients, smooth animations, and clean typography out of the box.</p>"
+    Window.card "<h3>⚡ Super Fast</h3><p>Powered by Electron for native-like performance across all platforms.</p>"
+    Window.card "<h3>🧩 Easy to Use</h3><p>One keyword to declare, simple methods to build stunning UIs.</p>"
+
+    Window.divider
+
+    # Demonstrate buttons with callbacks
+    Window.heading "Interactive Elements"
+    
+    Window.print "Click the buttons below to see interactivity:"
+    
+    Window.button "Say Hello", =>
+        Window.alert "Hello from Flick! 👋"
+    end
+
+    Window.button "Show a Popup", =>
+        free name = Window.prompt "What's your name?", "Friend"
+        Window.alert "Nice to meet you, " + name + "!"
+    end
+
+    Window.button "Clear Window", =>
+        Window.clear
+        Window.heading "Window Cleared! ✨"
+        Window.print "Click the button below to see the full demo again."
+        Window.button "Reload Demo", =>
+            main
+        end
+    end
+
+    Window.divider
+
+    # Grid layout demo
+    Window.heading "Grid Layouts"
+    Window.print "Organize content in clean grids:"
+    Window.grid 3, ["Feature 1", "Feature 2", "Feature 3", "Feature 4", "Feature 5", "Feature 6"]
+
+    Window.divider
+
+    # Image demo
+    Window.heading "Images"
+    Window.print "Display images easily:"
+    Window.image "https://picsum.photos/600/200", {width: 600, height: 200}
+
+    Window.divider
+
+    # Canvas drawing demo
+    Window.heading "Canvas Drawing"
+    Window.print "Draw shapes and graphics with simple commands:"
+    
+    free canvas = Window.canvas 500, 300
+    canvas.rect 50, 50, 100, 80, {color: "#667eea"}
+    canvas.circle 250, 90, 40, {color: "#764ba2"}
+    canvas.rect 350, 50, 100, 80, {color: "#f093fb", stroke: yes, strokeColor: "#4facfe", strokeWidth: 3}
+    canvas.line 50, 200, 450, 200, {color: "#ffd89b", width: 4}
+    canvas.text "Canvas Graphics!", 150, 250, {color: "#333", font: "24px sans-serif"}
+    
+    Window.divider
+
+    # Input fields demo
+    Window.heading "Form Inputs"
+    free nameInput = Window.input {label: "Your Name", placeholder: "Enter your name..."}
+    free emailInput = Window.input {label: "Email", type: "email", placeholder: "your@email.com"}
+    
+    Window.button "Submit Form", =>
+        free name = Window.getInputValue nameInput
+        free email = Window.getInputValue emailInput
+        Window.alert "Thanks " + name + "! We'll contact you at " + email
+    end
+
+    Window.divider
+    
+    Window.print "This is just the beginning! Build amazing desktop apps with Flick. 🎉"
+    Window.print "Press Ctrl+C in the terminal to close the window."
+end
+
+# Run the demo
+main

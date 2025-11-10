@@ -1,0 +1,9 @@
+# Simplest possible window test
+declare window
+
+Window.open "Test", {width: 400, height: 300}
+Window.heading "Hello!"
+Window.print "This is a test."
+Window.button "Click", =>
+    Window.alert "Clicked!"
+end

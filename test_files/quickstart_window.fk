@@ -1,0 +1,28 @@
+#  Quick Start - Flick Window Plugin
+#  The simplest possible GUI example
+
+declare window
+
+# Open a window and show content in one go!
+Window.open "Hello Flick!", {width: 500, height: 400}
+
+Window.heading "Hello, World! 👋"
+
+Window.print "This is your first Flick window."
+Window.print "Clean. Simple. Modern."
+
+Window.divider
+
+Window.button "Click Me!", =>
+    Window.alert "You clicked the button! 🎉"
+end
+
+Window.button "What's your name?", =>
+    free name = Window.prompt "Enter your name:", "Friend"
+    Window.heading "Hello, " + name + "!"
+    Window.print "Welcome to Flick Windows!"
+end
+
+Window.divider
+
+Window.card "<h3>🚀 That's it!</h3><p>You just built a GUI app with Flick. No complex setup, no ugly interfaces - just beautiful, modern windows.</p>"

@@ -406,3 +406,6 @@ export const RandomPlugin: Plugin = {
   }
 };
 
+// Export Window Plugin
+export { WindowPlugin } from './window.js';
+

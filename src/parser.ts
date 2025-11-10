@@ -15,16 +15,22 @@ export class Parser {
     this.pluginManager = pluginManager;
   }
 
-  private peek(offset: number = 0): Token {
+  public peek(offset: number = 0): Token {
     const pos = this.position + offset;
-    return pos < this.tokens.length ? this.tokens[pos] : this.tokens[this.tokens.length - 1];
+    if (pos < 0) {
+      return this.tokens[0];
+    }
+    if (pos >= this.tokens.length) {
+      return this.tokens[this.tokens.length - 1];
+    }
+    return this.tokens[pos];
   }
 
-  private advance(): Token {
+  public advance(): Token {
     return this.tokens[this.position++];
   }
 
-  private expect(type: TokenType): Token {
+  public expect(type: TokenType): Token {
     const token = this.peek();
     if (token.type !== type) {
       throw new Error(`Expected ${type} but got ${token.type} at line ${token.line}, column ${token.column}`);
@@ -32,11 +38,11 @@ export class Parser {
     return this.advance();
   }
 
-  private match(...types: TokenType[]): boolean {
+  public match(...types: TokenType[]): boolean {
     return types.includes(this.peek().type);
   }
 
-  private isKeyword(token: Token): boolean {
+  public isKeyword(token: Token): boolean {
     // List of all keyword token types
     const keywords = [
       TokenType.GROUP, TokenType.BLUEPRINT, TokenType.TASK, TokenType.FREE, TokenType.LOCK,
@@ -747,85 +753,111 @@ export class Parser {
           property,
           computed: true,
         };
+      } else if (this.match(TokenType.LPAREN)) {
+        // Explicit parenthesized call
+        const args: AST.ASTNode[] = [];
+        this.advance();
+        while (!this.match(TokenType.RPAREN)) {
+          args.push(this.parseExpression());
+          if (this.match(TokenType.COMMA)) {
+            this.advance();
+          }
+        }
+        this.expect(TokenType.RPAREN);
+        expr = { type: 'CallExpression', callee: expr, args };
       } else if (
-        this.match(TokenType.LPAREN) ||
-        (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET) &&
-          (expr.type === 'Identifier' || expr.type === 'MemberExpression'))
+        (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.LBRACE, TokenType.LBRACKET) &&
+          (expr.type === 'Identifier' || expr.type === 'MemberExpression')) ||
+        (this.match(TokenType.IDENTIFIER) && (expr.type === 'Identifier' || expr.type === 'MemberExpression') &&
+          this.peek(1).type !== TokenType.DOT && this.peek(1).type !== TokenType.DIVIDE)
       ) {
         // Function call
+        const callLine = this.peek(-1).line;
         const args: AST.ASTNode[] = [];
 
-        if (this.match(TokenType.LPAREN)) {
-          this.advance();
-          while (!this.match(TokenType.RPAREN)) {
-            args.push(this.parseExpression());
-            if (this.match(TokenType.COMMA)) {
-              this.advance();
-            }
+        // Space-separated arguments (without parentheses)
+        // Keep parsing while we see valid argument tokens on the same line
+        // Stop at statement keywords or structural tokens
+        while (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET, TokenType.ARROW)) {
+          const currentToken = this.peek();
+          if (currentToken.line !== callLine) {
+            break;
           }
-          this.expect(TokenType.RPAREN);
-        } else {
-          // Space-separated arguments (without parentheses)
-          // Keep parsing while we see valid argument tokens
-          // Stop at statement keywords or structural tokens
-          while (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET)) {
-            // Before consuming the token, check if it's a statement keyword
-            if (this.match(TokenType.FREE, TokenType.LOCK, TokenType.PRINT, TokenType.ASSUME,
-                          TokenType.EACH, TokenType.MARCH, TokenType.SELECT, TokenType.ROUTE,
-                          TokenType.RESPOND, TokenType.TASK, TokenType.GROUP, TokenType.BLUEPRINT,
-                          TokenType.DO, TokenType.DECLARE, TokenType.USE)) {
+
+          // Before consuming the token, check if it's a statement keyword
+          if (this.match(TokenType.FREE, TokenType.LOCK, TokenType.PRINT, TokenType.ASSUME,
+                        TokenType.EACH, TokenType.MARCH, TokenType.SELECT, TokenType.ROUTE,
+                        TokenType.RESPOND, TokenType.TASK, TokenType.GROUP, TokenType.BLUEPRINT,
+                        TokenType.DO, TokenType.DECLARE, TokenType.USE)) {
+            break;
+          }
+
+          // Check for ARROW - but only break if it's NOT preceded by a comma
+          // (comma + arrow means it's a lambda argument)
+          if (this.match(TokenType.ARROW)) {
+            const prevToken = this.peek(-1);
+            if (prevToken.type !== TokenType.COMMA) {
               break;
             }
 
-            // Check for structural/ending tokens BEFORE consuming
-            if (this.match(TokenType.ARROW, TokenType.ASSIGN, TokenType.EOF, TokenType.END,
-                          TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE)) {
-              break;
-            }
+            // This is a lambda expression argument
+            args.push(this.parsePrimaryExpression()); // This will parse the lambda
 
-            // BEFORE parsing as an argument, check if this looks like a new statement
-            // An identifier followed by / or . is likely starting a new member expression, not an argument
-            if (this.match(TokenType.IDENTIFIER)) {
-              const followingToken = this.peek(1);
-              if (followingToken.type === TokenType.DIVIDE || followingToken.type === TokenType.DOT) {
-                // This identifier starts a member expression, not an argument
-                break;
-              }
-            }
+            // After a lambda with 'end', we're done with arguments
+            continue;
+          }
 
-            args.push(this.parsePrimaryExpression());
+          // Check for other structural/ending tokens
+          if (this.match(TokenType.ASSIGN, TokenType.EOF, TokenType.MAYBE, TokenType.OTHERWISE, TokenType.RBRACE)) {
+            break;
+          }
 
-            // After parsing an arg, check if we should continue
-            if (this.match(TokenType.COMMA)) {
-              this.advance();
-              continue;
-            }
-
-            // Before continuing, check if the current token (which would be the next arg)
-            // is followed by a stopping point (like = in variable declarations)
-            // or if it looks like a function call (identifier followed by string/number/identifier/object/array)
-            if (this.match(TokenType.IDENTIFIER)) {
-              const followingToken = this.peek(1);
-              if (followingToken.type === TokenType.ASSIGN ||
-                  followingToken.type === TokenType.ARROW ||
-                  followingToken.type === TokenType.COLON) {
-                break;
-              }
-              // If identifier is followed by argument-like tokens, it's likely a function call
-              // e.g., "write "file.txt", data" should not be parsed as args to previous call
-              if (followingToken.type === TokenType.STRING ||
-                  followingToken.type === TokenType.NUMBER ||
-                  followingToken.type === TokenType.LBRACE ||
-                  followingToken.type === TokenType.LBRACKET) {
-                break;
-              }
-            }
-
-            // Stop if next token is not an argument-like token
-            if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET)) {
+          // BEFORE parsing as an argument, check if this looks like a new statement
+          // An identifier followed by / or . is likely starting a new member expression, not an argument
+          if (this.match(TokenType.IDENTIFIER)) {
+            const followingToken = this.peek(1);
+            if (followingToken.type === TokenType.DIVIDE || followingToken.type === TokenType.DOT) {
+              // This identifier starts a member expression, not an argument
               break;
             }
           }
+
+          args.push(this.parsePrimaryExpression());
+
+          // After parsing an arg, check if we should continue
+          if (this.match(TokenType.COMMA)) {
+            this.advance();
+            continue;
+          }
+
+          // Before continuing, check if the current token (which would be the next arg)
+          // is followed by a stopping point (like = in variable declarations)
+          // or if it looks like a function call (identifier followed by string/number/identifier/object/array)
+          if (this.match(TokenType.IDENTIFIER)) {
+            const followingToken = this.peek(1);
+            if (followingToken.type === TokenType.ASSIGN ||
+                followingToken.type === TokenType.ARROW ||
+                followingToken.type === TokenType.COLON) {
+              break;
+            }
+            // If identifier is followed by argument-like tokens, it's likely a function call
+            // e.g., "write "file.txt", data" should not be parsed as args to previous call
+            if (followingToken.type === TokenType.STRING ||
+                followingToken.type === TokenType.NUMBER ||
+                followingToken.type === TokenType.LBRACE ||
+                followingToken.type === TokenType.LBRACKET) {
+              break;
+            }
+          }
+
+          // Stop if next token is not an argument-like token on the same line
+          if (!this.match(TokenType.STRING, TokenType.NUMBER, TokenType.IDENTIFIER, TokenType.LBRACE, TokenType.LBRACKET)) {
+            break;
+          }
+        }
+
+        if (args.length === 0) {
+          break;
         }
 
         expr = { type: 'CallExpression', callee: expr, args };
@@ -933,6 +965,26 @@ export class Parser {
 
       this.expect(TokenType.RBRACE);
       return { type: 'ObjectLiteral', properties };
+    }
+
+    // Lambda expression: => body end
+    if (this.match(TokenType.ARROW)) {
+      this.advance(); // consume =>
+      
+      const body: AST.ASTNode[] = [];
+      
+      // Parse the body until we hit 'end'
+      while (!this.match(TokenType.END) && !this.match(TokenType.EOF)) {
+        body.push(this.parseStatement());
+      }
+      
+      this.expect(TokenType.END);
+      
+      return {
+        type: 'LambdaExpression',
+        parameters: [], // No parameters for now, can be extended later
+        body
+      };
     }
 
     // Parenthesized expression

@@ -6,7 +6,7 @@ import { Lexer } from './lexer.js';
 import { Parser } from './parser.js';
 import { Interpreter } from './interpreter.js';
 import { PluginManager } from './plugin.js';
-import { WebPlugin, FilesPlugin, TimePlugin, RandomPlugin } from './plugins/builtins.js';
+import { WebPlugin, FilesPlugin, TimePlugin, RandomPlugin, WindowPlugin } from './plugins/builtins.js';
 
 export async function runFlick(filePath: string): Promise<void> {
   try {
@@ -24,6 +24,7 @@ export async function runFlick(filePath: string): Promise<void> {
     pluginManager.registerPlugin(FilesPlugin);
     pluginManager.registerPlugin(TimePlugin);
     pluginManager.registerPlugin(RandomPlugin);
+    pluginManager.registerPlugin(WindowPlugin);
 
     // Tokenize
     const lexer = new Lexer(sourceCode);

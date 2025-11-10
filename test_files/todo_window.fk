@@ -1,0 +1,102 @@
+declare window
+
+free todos = []
+free nextId = 1
+
+task renderTodos =>
+    Window.clear
+    Window.heading "📝 Flick Todo App"
+    
+    Window.divider
+    
+    #  Add todo form
+    Window.card "<h3>Add New Todo</h3>"
+    free todoInput = Window.input {placeholder: "What needs to be done?", label: "New Task"}
+    
+    Window.button "Add Todo", =>
+        free taskText = Window.getInputValue todoInput
+
+        assume taskText != "" =>
+            free newTodo = {id: nextId, "task": taskText, done: no}
+            free oldTodos = todos
+            todos := todos + [newTodo]
+            nextId := nextId + 1
+            renderTodos
+        end
+    end
+    
+    Window.divider
+    
+    #  Display todos
+    Window.heading "Your Tasks"
+    
+    assume todos == [] =>
+        Window.print "No todos yet! Add one above to get started.", style={color: "#878787", fontStyle: "italic"}
+    otherwise =>
+        free index = 0
+        each todo in todos =>
+            free taskText = todo["task"]
+            free isDone = todo["done"]
+            free currentIndex = index
+            
+            assume isDone =>
+                Window.card "<strike style='color: #878787'>" + taskText + "</strike> ✓"
+            otherwise =>
+                Window.card taskText
+            end
+            
+            Window.button "Mark Done", =>
+                free tempArray = []
+                free idx = 0
+                each t in todos =>
+                    assume idx == currentIndex =>
+                        free updatedTodo = {"task": t["task"], "done": yes}
+                        tempArray := tempArray + [updatedTodo]
+                    otherwise =>
+                        tempArray := tempArray + [t]
+                    end
+                    idx := idx + 1
+                end
+                
+                todos := tempArray
+
+                renderTodos
+            end
+            
+            Window.button "Delete", =>
+                free tempArray = []
+                free idx = 0
+
+                each t in todos =>
+                    assume idx != currentIndex =>
+                        tempArray := tempArray + [t]
+                    end
+                    idx := idx + 1
+                end
+
+                todos := tempArray
+                renderTodos
+            end
+            
+            index := index + 1
+        end
+    end
+    
+    Window.divider
+    
+    free todoCount = 0
+    each t in todos =>
+        todoCount := todoCount + 1
+    end
+
+    Window.print "Total tasks: " + str(todoCount)
+    Window.print "Pro tip: This demonstrates state management in Flick!", style={fontSize: "12px", color: "#666"}
+end
+
+task main =>
+    Window.open "Flick Todo App", {width: 600, height: 700}
+    
+    renderTodos
+end
+
+main
